@@ -8,8 +8,8 @@ flags = tf.app.flags
 ############################
 
 # For separate margin loss
-flags.DEFINE_float('lambda_val1', 0.001, 'down weight of the loss for vgg-face feature loss') #
-flags.DEFINE_float('lambda_val2', 0.01, 'down weight of the loss for gan loss')
+flags.DEFINE_float('lambda_l1', 100, 'down weight of the loss for L1 texture loss') #
+flags.DEFINE_float('lambda_fea', 1, 'down weight of the loss for vgg-face feature loss')
 
 # For training
 flags.DEFINE_integer('dataset_size', 14000, 'number of images in the dataset') # 120000
@@ -30,7 +30,7 @@ flags.DEFINE_boolean('use_profile', True, 'Use profile image or profile feature'
 flags.DEFINE_boolean('mask_with_y', True, 'use the true label to mask out target capsule or not')
 flags.DEFINE_boolean('crop', True, 'Crop image to target size')
 flags.DEFINE_float('lr', 0.0001, 'base learning rate')
-flags.DEFINE_float('--beta1', 0.5, 'momentum term of adam')
+flags.DEFINE_float('beta1', 0.5, 'momentum term of adam')
 flags.DEFINE_float('stddev', 0.02, 'stddev for W initializer')
 
 

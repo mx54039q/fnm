@@ -44,10 +44,10 @@ class Net(object):
                     self.texture_loss,
                     global_step=self.global_step, var_list=self.vars_gen)
                 self.train_gen = tf.train.AdamOptimizer(self.lr, beta1=cfg.beta1).minimize(
-                    self.texture_loss + cfg.lambda_val2*self.g_loss, 
+                    self.texture_loss + self.g_loss, 
                     global_step=self.global_step, var_list=self.vars_gen)#
                 self.train_dis = tf.train.AdamOptimizer(self.lr, beta1=cfg.beta1).minimize(
-                    cfg.lambda_val2*self.d_loss,
+                    self.d_loss,
                     global_step=self.global_step, var_list=self.vars_dis)
                 
         tf.logging.info('Seting up the main structure')
@@ -139,7 +139,7 @@ class Net(object):
     def loss(self):
         with tf.name_scope('loss') as scope:
             # 1. Frontalization Loss: L1-Norm
-            self.front_loss = tf.reduce_mean(tf.abs(self.front - self.texture)) # 
+            self.front_loss = tf.reduce_mean(tf.abs(self.front/255. - self.texture/255.)) # 
             tf.add_to_collection('losses', self.front_loss)
             
             # 2. Feature Loss: Cosine-Norm
@@ -167,7 +167,7 @@ class Net(object):
             tf.add_to_collection('losses', self.g_loss)
             
             # 5. Total texture loss
-            self.texture_loss = self.front_loss + cfg.lambda_val1 * self.feature_loss + l2_loss # loss
+            self.texture_loss = cfg.lambda_l1 * self.front_loss + cfg.lambda_fea * self.feature_loss + l2_loss
             
 
     # Summary

@@ -1,10 +1,12 @@
 #MODEL-实验日志:
-default: 超参12(e-3,e-3), 直接输入特征(relu7层), 第一层不用BN, BN分测试和训练, 初始lr=e-3(指数下降), L2规则化0.0001, 
-         先训练一个epoch的texture loss再加入GAN loss, 1次D2次G, BatchSize=32, Adam, lrelu, mirror, 
+default: 超参12(100, 1), 直接输入特征(relu7层), 第一层不用BN, BN分测试和训练, 初始lr=e-4(指数下降), L2规则化0.0001, 
+         先训练一个epoch的texture loss再加入GAN loss, 1次D2次G, BatchSize=32, Adam(momenta=0.5), lrelu, 
+         mirror, 判别器D从vgg-pool5开始构建, L1损失输入的图范围[0,1]
+         
 1. session01_1: 
 
 1. setting1_1: 直接从pool5重建人脸, 
-
+1. setting1_2: 从relu7重建人脸(不用全连接), 
 
 #FBI WARNING:
 1. Net2.py: 不再通过全连接层将vgg特征转化到(14,14,256), 而是先reshape(4,4,256)再通过deconv操作到(14,14,256);参数量从(4096*14*14*256)减小到
