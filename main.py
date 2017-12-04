@@ -30,32 +30,33 @@ def main(_):
     with tf.Session(config=config, graph=net.graph) as sess:
         sess.run(tf.global_variables_initializer())
         saver = tf.train.Saver(max_to_keep=1)
-        if cfg.is_fineture:
+        if cfg.is_finetune:
             saver.restore(sess, cfg.model_path)
             print('Load Model Successfully!')
         
         num_batch = int(cfg.dataset_size / cfg.batch_size)
         
         # 1. Only texture loss and feature loss
-        for step in range(num_batch):
-            tr_profile, tr_front = data_feed.get_train_batch() if cfg.use_profile \
-                else data_feed.get_train_batch_feature()
-            global_step = sess.run(net.global_step)
-            _, lf1, lf2, lr = sess.run([net.train_texture,net.front_loss,net.feature_loss,net.lr],
-                {net.profile:tr_profile, net.front:tr_front, net.is_train:True})
-            print('Pretrain-Step: %d, Front Loss:%.4f, Feature Loss:%.4f, lr:%.5f' % 
-                (step, lf1, lf2, lr))
+        if not cfg.is_finetune:
+            for step in range(num_batch):
+                tr_profile, tr_front = data_feed.get_train_batch() if cfg.use_profile \
+                    else data_feed.get_train_batch_feature()
+                global_step = sess.run(net.global_step)
+                _, lf1, lf2, lr = sess.run([net.train_texture,net.front_loss,net.feature_loss,net.lr],
+                    {net.profile:tr_profile, net.front:tr_front, net.is_train:True})
+                print('Pretrain-Step: %d, Front Loss:%.4f, Feature Loss:%.4f, lr:%.5f' % 
+                    (step, lf1, lf2, lr))
 
-            if (global_step + 1) % cfg.test_sum_freq == 0:
-                print('Testing')
-                te_profile, te_front = data_feed.get_test_batch(test_batch) if cfg.use_profile \
-                    else data_feed.get_test_batch_feature(test_batch)
-                l1, l2, images = sess.run([net.front_loss,net.feature_loss,net.texture],
-                    {net.profile:te_profile, net.front:te_front, net.is_train:False})
-                data_feed.save_images(images, 0)
+                if (global_step + 1) % cfg.test_sum_freq == 0:
+                    print('Testing')
+                    te_profile, te_front = data_feed.get_test_batch(test_batch) if cfg.use_profile \
+                        else data_feed.get_test_batch_feature(test_batch)
+                    l1, l2, images = sess.run([net.front_loss,net.feature_loss,net.texture],
+                        {net.profile:te_profile, net.front:te_front, net.is_train:False})
+                    data_feed.save_images(images, 0)
 
-            if step == num_batch - 1:
-                saver.save(sess, cfg.logdir + '-%04d-%02d' % (0, global_step))#
+                if step == num_batch - 1:
+                    saver.save(sess, cfg.logdir + '-%04d-%02d' % (0, global_step))#
                 
         # 2. Join GAN loss
         for epoch in range(cfg.epoch):

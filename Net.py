@@ -40,12 +40,14 @@ class Net(object):
                 self.lr = tf.train.exponential_decay(cfg.lr,self.global_step,
                     decay_steps=cfg.decay_steps, decay_rate=0.98,staircase=True) #
 
-                self.train_texture = tf.train.AdamOptimizer(self.lr).minimize(self.texture_loss,
+                self.train_texture = tf.train.AdamOptimizer(self.lr, beta1=cfg.beta1).minimize(
+                    self.texture_loss,
                     global_step=self.global_step, var_list=self.vars_gen)
-                self.train_gen = tf.train.AdamOptimizer(self.lr).minimize(
-                    0.1*self.texture_loss + cfg.lambda_val2*self.g_loss, 
+                self.train_gen = tf.train.AdamOptimizer(self.lr, beta1=cfg.beta1).minimize(
+                    self.texture_loss + cfg.lambda_val2*self.g_loss, 
                     global_step=self.global_step, var_list=self.vars_gen)#
-                self.train_dis = tf.train.AdamOptimizer(self.lr).minimize(cfg.lambda_val2*self.d_loss,
+                self.train_dis = tf.train.AdamOptimizer(self.lr, beta1=cfg.beta1).minimize(
+                    cfg.lambda_val2*self.d_loss,
                     global_step=self.global_step, var_list=self.vars_dis)
                 
         tf.logging.info('Seting up the main structure')
@@ -53,7 +55,7 @@ class Net(object):
     def build_arch(self):
         if(cfg.use_profile):
             with tf.variable_scope('vgg_encoder') as scope:
-                self.vgg_pool5, _ = self.vgg.forward(self.profile)
+                self.vgg_pool5, self.vgg_relu7 = self.vgg.forward(self.profile)
         else:
             self.vgg_pool5 = self.profile
         assert self.vgg_pool5.get_shape().as_list()[1:] == [7, 7, 512]
@@ -62,7 +64,8 @@ class Net(object):
         # The feature vector extract from profile by VGG-16 is 4096-D
         with tf.variable_scope('decoder') as scope:
             # Construct BatchNorm Layer
-            #bn1_1 = batch_norm(name='bn1_1')
+            bn0_2 = batch_norm(name='bn0_2')
+            bn1_1 = batch_norm(name='bn1_1')
             bn1_2 = batch_norm(name='bn1_2')
             bn2_1 = batch_norm(name='bn2_1')
             bn2_2 = batch_norm(name='bn2_2')
@@ -74,10 +77,19 @@ class Net(object):
             #fc1_reshape = tf.reshape(fc1, [-1,14,14,256])
 
             # Stacked Transpose Convolutions
-            g_input = self.vgg_pool5
-            dconv1_1 = lrelu((deconv2d(g_input, 256, 'dconv1_1', 
-                kernel_size=5, strides = 2), self.is_train)
-            #output shape: [14, 14, 256]
+            g_input = tf.reshape(self.vgg_relu7, [-1,4,4,256])
+            #output shape: [4, 4, 256]
+            dconv0_1 = lrelu(deconv2d(g_input, 256, 'dconv0_1', 
+                kernel_size=3, strides = 1, padding='valid'))
+            print(dconv0_1.get_shape())
+            #output shape: [6, 6, 256]
+            dconv0_2 = lrelu(bn0_2(deconv2d(dconv0_1, 256, 'dconv0_2', 
+                kernel_size=3, strides = 2), self.is_train))
+            print(dconv0_2.get_shape())
+            #output shape: [12, 12, 256]
+            dconv1_1 = lrelu(bn1_1(deconv2d(dconv0_2, 128, 'dconv1_1', 
+                kernel_size=3, strides = 1, padding='valid'), self.is_train))
+            #output shape: [14, 14, 128]
             dconv1_2 = lrelu(bn1_2(deconv2d(dconv1_1, 128, 'dconv1_2', 
                 kernel_size=5, strides = 2), self.is_train))
             #output shape: [28, 28, 128]
