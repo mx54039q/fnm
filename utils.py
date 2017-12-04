@@ -38,7 +38,7 @@ class loadData(object):
             self.f_test = open(cfg.test_list.split('.')[0]+'_feature', 'r') #
             
         assert Image.open(os.path.join(cfg.data_path, self.test_list[0,0])).size == \
-                            (cfg.ori_width, cfg.ori_height)
+            (cfg.ori_width, cfg.ori_height)
     
     def get_train_batch(self):
         '''
@@ -51,11 +51,11 @@ class loadData(object):
         for i in range(self.batch_size):
             try:
                 trX[i] = self.read_image(self.train_list[i + self.train_index][0], flip=True)
-                trY[i] = self.read_image(self.train_list[i + self.train_index][1])
+                trY[i] = self.read_image(self.train_list[i + self.train_index][1], flip=True)
             except:
                 self.train_index = -i
                 trX[i] = self.read_image(self.train_list[i +self.train_index][0], flip=True)
-                trY[i] = self.read_image(self.train_list[i +self.train_index][1])
+                trY[i] = self.read_image(self.train_list[i +self.train_index][1], flip=True)
         self.train_index += self.batch_size
         return(trX, trY)
     
@@ -70,12 +70,12 @@ class loadData(object):
         for i in range(self.batch_size):
             try:
                 trX[i] = self.read_feature(self.f_train)
-                trY[i] = self.read_image(self.train_list[i + self.train_index][1])
+                trY[i] = self.read_image(self.train_list[i + self.train_index][1], flip=True)
             except:
                 self.train_index = -i
                 self.f_train.seek(0)
                 trX[i] = self.read_feature(self.f_train)
-                trY[i] = self.read_image(self.train_list[i +self.train_index][1])
+                trY[i] = self.read_image(self.train_list[i +self.train_index][1], flip=True)
         self.train_index += self.batch_size
         return(trX, trY)
         

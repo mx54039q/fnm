@@ -6,7 +6,7 @@ import tensorflow as tf
 import time
 
 VGG_MEAN = [129.1836, 104.7624, 93.5940] # for channel BGR
-#VGG_MEAN = [103.939, 116.779, 123.68] 
+
 
 class Vgg16:
     def __init__(self, vgg16_npy_path=None):
@@ -55,12 +55,12 @@ class Vgg16:
             with tf.variable_scope('conv5_3'):
                 self.conv5_3_weights, self.conv5_3_bias = self.get_filter_bias('conv5_3')
 
-            with tf.variable_scope('fc6'):
-                self.fc6_weights, self.fc6_bias = self.get_filter_bias('fc6')
-            with tf.variable_scope('fc7'):
-                self.fc7_weights, self.fc7_bias = self.get_filter_bias('fc7')
-            with tf.variable_scope('fc8'):
-                self.fc8_weights, self.fc8_bias = self.get_filter_bias('fc8')
+            #with tf.variable_scope('fc6'):
+            #    self.fc6_weights, self.fc6_bias = self.get_filter_bias('fc6')
+            #with tf.variable_scope('fc7'):
+            #    self.fc7_weights, self.fc7_bias = self.get_filter_bias('fc7')
+            #with tf.variable_scope('fc8'):
+            #    self.fc8_weights, self.fc8_bias = self.get_filter_bias('fc8')
         
         # Clear the model dict
         self.data_dict = None 
@@ -70,11 +70,8 @@ class Vgg16:
         """
         forword pass 
         args:
-            rgb: rgb image tensors with shape(batch, height, width, 3), values range[0,255]
-            reuse: whether to reuse the variables. (default False)
-        return:
-            pool5: output of pool5 layers
-            relu7: output of relu7 layers
+          rgb: rgb image tensors with shape(batch, height, width, 3), values range[0,255]
+          reuse: whether to reuse the variables. (default False)
         """
         # Convert RGB to BGR
         red, green, blue = tf.split(axis=3, num_or_size_splits=3, value=rgb)
@@ -142,26 +139,24 @@ class Vgg16:
         pool5 = self.max_pool(conv5_3, 'pool5')
         # output shape: [7, 7, 512]
 
-        with tf.name_scope('fc6'):
-            shape = pool5.get_shape().as_list()
-            dim = 1
-            for d in shape[1:]:
-                dim *= d
-            x = tf.reshape(pool5, [-1, dim])
-            fc6 = tf.nn.bias_add(tf.matmul(x, self.fc6_weights), self.fc6_bias)
-        assert fc6.get_shape().as_list()[1:] == [4096]
-        relu6 = tf.nn.relu(fc6)
-        # output shape: [4096]
+        #with tf.name_scope('fc6'):
+        #    shape = pool5.get_shape().as_list()
+        #    dim = 1
+        #    for d in shape[1:]:
+        #        dim *= d
+        #    x = tf.reshape(pool5, [-1, dim])
+        #    fc6 = tf.nn.bias_add(tf.matmul(x, self.fc6_weights), self.fc6_bias)
+        #assert fc6.get_shape().as_list()[1:] == [4096]
+        #relu6 = tf.nn.relu(fc6)
+
+        #with tf.name_scope('fc7'):
+        #    fc7 = tf.nn.bias_add(tf.matmul(fc6, self.fc7_weights), self.fc7_bias)
+        #relu7 = tf.nn.relu(fc7)
         
-        with tf.name_scope('fc7'):
-            fc7 = tf.nn.bias_add(tf.matmul(fc6, self.fc7_weights), self.fc7_bias)
-        relu7 = tf.nn.relu(fc7)
-        # output shape: [4096]
+        #with tf.name_scope('fc8'):
+        #    fc8 = tf.nn.bias_add(tf.matmul(fc7, self.fc8_weights), self.fc8_bias)
         
-        with tf.name_scope('fc8'):
-            fc8 = tf.nn.bias_add(tf.matmul(fc7, self.fc8_weights), self.fc8_bias)
-        
-        return pool5, relu7 #relu7
+        return pool5 #relu7
 
 
     def avg_pool(self, bottom, name):

@@ -35,15 +35,17 @@ class Net(object):
                 
                 self.vars_gen = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='decoder')
                 self.vars_dis = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='discriminator')
+                
                 self.global_step = tf.Variable(0, name='global_step', trainable=False)
                 self.lr = tf.train.exponential_decay(cfg.lr,self.global_step,
-                    decay_steps=cfg.dataset_size/cfg.batch_size*100, decay_rate=0.98,staircase=True) #
-                self.optimizer = tf.train.AdamOptimizer(self.lr, epsilon = epsilon)
-                self.train_texture = self.optimizer.minimize(self.texture_loss,
+                    decay_steps=cfg.decay_steps, decay_rate=0.98,staircase=True) #
+
+                self.train_texture = tf.train.AdamOptimizer(self.lr).minimize(self.texture_loss,
                     global_step=self.global_step, var_list=self.vars_gen)
-                self.train_gen = self.optimizer.minimize(self.texture_loss + cfg.lambda_val2*self.g_loss,
-                    global_step=self.global_step, var_list=self.vars_gen)
-                self.train_dis = self.optimizer.minimize(cfg.lambda_val2*self.d_loss,
+                self.train_gen = tf.train.AdamOptimizer(self.lr).minimize(
+                    0.1*self.texture_loss + cfg.lambda_val2*self.g_loss, 
+                    global_step=self.global_step, var_list=self.vars_gen)#
+                self.train_dis = tf.train.AdamOptimizer(self.lr).minimize(cfg.lambda_val2*self.d_loss,
                     global_step=self.global_step, var_list=self.vars_dis)
                 
         tf.logging.info('Seting up the main structure')
@@ -51,17 +53,16 @@ class Net(object):
     def build_arch(self):
         if(cfg.use_profile):
             with tf.variable_scope('vgg_encoder') as scope:
-                self.fc7_encoder = self.vgg.forward(self.profile)
+                self.vgg_pool5, _ = self.vgg.forward(self.profile)
         else:
-            self.fc7_encoder = self.profile
-        assert self.fc7_encoder.get_shape().as_list()[1] == 4096
-        print 'VGG output feature shape:', self.fc7_encoder.get_shape()
+            self.vgg_pool5 = self.profile
+        assert self.vgg_pool5.get_shape().as_list()[1:] == [7, 7, 512]
+        print 'VGG output feature shape:', self.vgg_pool5.get_shape()
         
         # The feature vector extract from profile by VGG-16 is 4096-D
         with tf.variable_scope('decoder') as scope:
             # Construct BatchNorm Layer
-            bn0 = batch_norm(name='bn0')
-            bn1_1 = batch_norm(name='bn1_1')
+            #bn1_1 = batch_norm(name='bn1_1')
             bn1_2 = batch_norm(name='bn1_2')
             bn2_1 = batch_norm(name='bn2_1')
             bn2_2 = batch_norm(name='bn2_2')
@@ -69,55 +70,73 @@ class Net(object):
             bn3_2 = batch_norm(name='bn3_2')
             
             # map from fc7_encoder to 14 × 14 × 256 localized features
-            fc1 = fullyConnect(self.fc7_encoder, 14*14*256, 'fc1') # bn0()
-            fc1_reshape = tf.reshape(fc1, [-1,14,14,256])
-            print 'fc1 output shape:', fc1_reshape.get_shape()
+            #fc1 = fullyConnect(self.fc7_encoder, 14*14*256, 'fc1') # bn0()
+            #fc1_reshape = tf.reshape(fc1, [-1,14,14,256])
 
             # Stacked Transpose Convolutions
-            dconv1_1 = tf.nn.relu(bn1_1(deconv2d(fc1_reshape, 128, 'dconv1_1', 
+            g_input = self.vgg_pool5
+            dconv1_1 = lrelu((deconv2d(g_input, 256, 'dconv1_1', 
+                kernel_size=5, strides = 2), self.is_train)
+            #output shape: [14, 14, 256]
+            dconv1_2 = lrelu(bn1_2(deconv2d(dconv1_1, 128, 'dconv1_2', 
                 kernel_size=5, strides = 2), self.is_train))
-            dconv1_2 = tf.nn.relu(bn1_2(deconv2d(dconv1_1, 128, 'dconv1_2', 
+            #output shape: [28, 28, 128]
+            dconv2_1 = lrelu(bn2_1(deconv2d(dconv1_2, 64, 'dconv2_1', 
+                kernel_size=5, strides = 2), self.is_train))
+            #output shape: [56, 56, 64]
+            dconv2_2 = lrelu(bn2_2(deconv2d(dconv2_1, 64, 'dconv2_2', 
+                kernel_size=5, strides = 2), self.is_train))
+            #output shape: [112, 112, 32]
+            dconv3_1 = lrelu(bn3_1(deconv2d(dconv2_2, 32, 'dconv3_1', 
+                kernel_size=5, strides = 2), self.is_train))
+            #output shape: [224, 224, 32]
+            dconv3_2 = lrelu(bn3_2(deconv2d(dconv3_1, 32, 'dconv3_2', 
                 kernel_size=5, strides = 1), self.is_train))
-            dconv2_1 = tf.nn.relu(bn2_1(deconv2d(dconv1_2, 64, 'dconv2_1', 
-                kernel_size=5, strides = 2), self.is_train))
-            dconv2_2 = tf.nn.relu(bn2_2(deconv2d(dconv2_1, 64, 'dconv2_2', 
-                kernel_size=5, strides = 2), self.is_train))
-            dconv3_1 = tf.nn.relu(bn3_1(deconv2d(dconv2_2, 32, 'dconv3_1', 
-                kernel_size=5, strides = 2), self.is_train))
-            dconv3_2 = tf.nn.relu(bn3_2(deconv2d(dconv3_1, 32, 'dconv3_2', 
-                kernel_size=5, strides = 1), self.is_train))
+            #output shape: [224, 224, 32]
             pw_conv = conv2d(dconv3_2, 3, 'pw_conv', kernel_size=1, strides = 1,
                                   activation = tf.nn.tanh)
-            self.texture = (pw_conv + 1) * 128.0
+            self.texture = (pw_conv + 1) * 127.5
         assert self.texture.get_shape().as_list()[1:] == [224,224,3]
         
         # Map texture and ground truth frontal into features again by VGG    
         with tf.variable_scope('vgg_encoder_recon'):
-            self.recon_feature = self.vgg.forward(self.texture)
-            self.recon_feature_gt = self.vgg.forward(self.front)
-        assert self.recon_feature.get_shape().as_list()[1] == 4096
+            self.vgg_pool5_recon, self.vgg_relu7_recon = self.vgg.forward(self.texture)
+            self.vgg_pool5_recon_gt, self.vgg_relu7_recon_gt = self.vgg.forward(self.front)
+        assert self.vgg_pool5_recon.get_shape().as_list()[1:] == [7,7,512]
+        assert self.vgg_relu7_recon.get_shape().as_list()[1] == 4096
         
         # Construct discriminator between generalized front face and ground truth
-        with tf.variable_scope('discriminator') as scope:
-            self.d_fake_logits = fullyConnect(self.recon_feature, 1, 'dis')
-            self.d_fake = tf.nn.sigmoid(self.d_fake_logits)
-            self.d_real_logits = fullyConnect(self.recon_feature_gt, 1, 'dis', reuse=True)
-            self.d_real = tf.nn.sigmoid(self.d_real_logits)
+        self.d_fake, self.d_fake_logits = self.discriminator(self.vgg_pool5_recon, reuse=False)
+        self.d_real, self.d_real_logits = self.discriminator(self.vgg_pool5_recon_gt, reuse=True)
         assert self.d_real.get_shape().as_list()[1] == 1
         
+    def discriminator(self, fmap, y=None, reuse=False):
+        with tf.variable_scope("discriminator", reuse=reuse) as scope:
+            # input feature maps is 7 x 7 x 512 from vgg-face
+            d_bn1 = batch_norm(name='d_bn1')
+
+            h0 = lrelu(conv2d(fmap, 128, 'dis_conv0'))
+            h1 = lrelu(d_bn1(conv2d(h0, 64, 'dis_conv1')))
+            dim = 1
+            for d in h1.get_shape().as_list()[1:]:
+                dim *= d
+            h2 = fullyConnect(tf.reshape(h1, [-1, dim]), 1, 'dis_fc')
+
+            return tf.nn.sigmoid(h2), h2
+            
     def loss(self):
         with tf.name_scope('loss') as scope:
             # 1. Frontalization Loss: L1-Norm
-            self.front_loss = tf.losses.absolute_difference(self.front, self.texture) # 
+            self.front_loss = tf.reduce_mean(tf.abs(self.front - self.texture)) # 
             tf.add_to_collection('losses', self.front_loss)
             
             # 2. Feature Loss: Cosine-Norm
-            recon_feature_norm = self.recon_feature / tf.norm(self.recon_feature,
-                                                              axis=1,keep_dims=True)
-            recon_feature_gt_norm = self.recon_feature_gt / tf.norm(self.recon_feature_gt,
-                                                                    axis=1,keep_dims=True)
-            self.feature_loss = tf.losses.cosine_distance(recon_feature_gt_norm,
-                                                          recon_feature_norm, dim=1)
+            vgg_relu7_recon_norm = self.vgg_relu7_recon / tf.norm(self.vgg_relu7_recon,
+                axis=1,keep_dims=True)
+            vgg_relu7_recon_gt_norm = self.vgg_relu7_recon_gt / tf.norm(self.vgg_relu7_recon_gt,
+                axis=1,keep_dims=True)
+            self.feature_loss = tf.losses.cosine_distance(labels=vgg_relu7_recon_gt_norm,
+                predictions=vgg_relu7_recon_norm, dim=1)
             tf.add_to_collection('losses', self.feature_loss)                 
             
             # 3. L2 Regulation Loss
