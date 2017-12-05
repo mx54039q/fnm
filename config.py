@@ -18,8 +18,8 @@ flags.DEFINE_string('train_list', 'mpie/setting1_train.txt', 'train list') # ses
 flags.DEFINE_string('test_list', 'mpie/session01_test3.txt', 'test set path') # lfw/lfw.txt
 flags.DEFINE_boolean('is_train', True, 'train or frontalize test')
 flags.DEFINE_boolean('is_finetune', False, 'finetune') # False
-flags.DEFINE_string('logdir', 'logdir/setting1/setting1_2', 'logs directory')
-flags.DEFINE_string('model_path', 'logdir/setting1/setting1_2-0002-4805', 'finetune model path') #
+flags.DEFINE_string('logdir', 'logdir/setting1/setting1_4', 'logs directory')
+flags.DEFINE_string('model_path', 'logdir/setting1/setting1_3-0000-1399', 'finetune model path') #
 flags.DEFINE_integer('batch_size', 10, 'batch size')
 flags.DEFINE_integer('decay_steps', 100, 'learning rate decay steps')
 flags.DEFINE_integer('epoch', 10, 'epoch')
@@ -29,7 +29,7 @@ flags.DEFINE_integer('save_freq', 100, 'the frequency of saving model(epoch)')
 flags.DEFINE_boolean('use_profile', True, 'Use profile image or profile feature') #
 flags.DEFINE_boolean('mask_with_y', True, 'use the true label to mask out target capsule or not')
 flags.DEFINE_boolean('crop', True, 'Crop image to target size')
-flags.DEFINE_float('lr', 0.0001, 'base learning rate')
+flags.DEFINE_float('lr', 0.0002, 'base learning rate')
 flags.DEFINE_float('beta1', 0.5, 'momentum term of adam')
 flags.DEFINE_float('stddev', 0.02, 'stddev for W initializer')
 

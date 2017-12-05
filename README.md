@@ -6,7 +6,9 @@ default: 超参12(100, 1), 直接输入特征(relu7层), 第一层不用BN, BN�
 1. session01_1: 
 
 1. setting1_1: 直接从pool5重建人脸, 
-1. setting1_2: 从relu7重建人脸(不用全连接), 
+2. setting1_2: 从relu7重建人脸(不用全连接),
+3. setting1_3: 从relu7重建人脸, 初始fc层7*7*256, batchSize=10,
+3. setting1_4: 从relu7重建人脸, 初始fc层7*7*256, batchSize=10, D直接从原图接入, D的输入将侧脸和正脸concat(参照pix2pix)
 
 #FBI WARNING:
 1. Net2.py: 不再通过全连接层将vgg特征转化到(14,14,256), 而是先reshape(4,4,256)再通过deconv操作到(14,14,256);参数量从(4096*14*14*256)减小到

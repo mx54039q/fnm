@@ -69,14 +69,14 @@ class Net(object):
             bn2_1 = batch_norm(name='bn2_1')
             bn2_2 = batch_norm(name='bn2_2')
             bn3_1 = batch_norm(name='bn3_1')
-            bn3_2 = batch_norm(name='bn3_2')
+            #bn3_2 = batch_norm(name='bn3_2')
             
             # map from fc7_encoder to 14 × 14 × 256 localized features
             #fc1 = fullyConnect(self.fc7_encoder, 14*14*256, 'fc1') # bn0()
             #fc1_reshape = tf.reshape(fc1, [-1,14,14,256])
 
             # Stacked Transpose Convolutions
-            fc1 = fullyConnect(self.fc7_encoder, 7*7*256, 'fc1') # bn0()
+            fc1 = fullyConnect(self.vgg_relu7, 7*7*256, 'fc1') # bn0()
             g_input = tf.reshape(fc1, [-1,7,7,256])
             #input shape: [7, 7, 256]
             dconv1_1 = lrelu(bn1_1(deconv2d(g_input, 128, 'dconv1_1', 
@@ -107,24 +107,35 @@ class Net(object):
         assert self.vgg_relu7_recon.get_shape().as_list()[1] == 4096
         
         # Construct discriminator between generalized front face and ground truth
-        self.d_fake, self.d_fake_logits = self.discriminator(self.vgg_pool5_recon, reuse=False)
-        self.d_real, self.d_real_logits = self.discriminator(self.vgg_pool5_recon_gt, reuse=True)
+        real_pf = tf.concat([self.profile, self.front], 3)
+        fake_pf = tf.concat([self.profile, self.texture], 3)
+        self.d_real, self.d_real_logits = self.discriminator(real_pf, reuse=False)
+        self.d_fake, self.d_fake_logits = self.discriminator(fake_pf, reuse=True)
         assert self.d_real.get_shape().as_list()[1] == 1
         
-    def discriminator(self, fmap, y=None, reuse=False):
+    def discriminator(self, images, y=None, reuse=False):
         with tf.variable_scope("discriminator", reuse=reuse) as scope:
-            # input feature maps is 7 x 7 x 512 from vgg-face
+            # shape of input images 224 x 224 x 6, concat profile and front face
             d_bn1 = batch_norm(name='d_bn1')
-
-            h0 = lrelu(conv2d(fmap, 128, 'dis_conv0'))
-            h1 = lrelu(d_bn1(conv2d(h0, 64, 'dis_conv1')))
-            dim = 1
-            for d in h1.get_shape().as_list()[1:]:
-                dim *= d
-            h2 = fullyConnect(tf.reshape(h1, [-1, dim]), 1, 'dis_fc')
-
-            return tf.nn.sigmoid(h2), h2
+            d_bn2 = batch_norm(name='d_bn2')
+            d_bn3 = batch_norm(name='d_bn3')
             
+            images = images / 2 - 127.5
+            h0 = lrelu(conv2d(images, 64, 'd_conv0', kernel_size=5, strides=2))
+            # h0 is (128 x 128 x 64)
+            h1 = lrelu(d_bn1(conv2d(h0, 128, 'd_conv1', kernel_size=5, strides=2), self.is_train))
+            # h1 is (64 x 64 x 128)
+            h2 = lrelu(d_bn2(conv2d(h1, 256, 'd_conv2', kernel_size=5, strides=2), self.is_train))
+            # h2 is (32x 32 x 256)
+            h3 = lrelu(d_bn3(conv2d(h2, 256, 'd_conv3', kernel_size=5, strides=2), self.is_train))
+            # h3 is (16 x 16 x 256)
+            dim = 1
+            for d in h3.get_shape().as_list()[1:]:
+                dim *= d
+            h4 = fullyConnect(tf.reshape(h3, [-1, dim]), 1, 'd_fc1')
+
+            return tf.nn.sigmoid(h4), h4
+
     def loss(self):
         with tf.name_scope('loss') as scope:
             # 1. Frontalization Loss: L1-Norm
