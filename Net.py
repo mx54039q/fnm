@@ -64,7 +64,6 @@ class Net(object):
         # The feature vector extract from profile by VGG-16 is 4096-D
         with tf.variable_scope('decoder') as scope:
             # Construct BatchNorm Layer
-            bn0_2 = batch_norm(name='bn0_2')
             bn1_1 = batch_norm(name='bn1_1')
             bn1_2 = batch_norm(name='bn1_2')
             bn2_1 = batch_norm(name='bn2_1')
@@ -77,35 +76,25 @@ class Net(object):
             #fc1_reshape = tf.reshape(fc1, [-1,14,14,256])
 
             # Stacked Transpose Convolutions
-            g_input = tf.reshape(self.vgg_relu7, [-1,4,4,256])
-            #output shape: [4, 4, 256]
-            dconv0_1 = lrelu(deconv2d(g_input, 256, 'dconv0_1', 
-                kernel_size=3, strides = 1, padding='valid'))
-            print(dconv0_1.get_shape())
-            #output shape: [6, 6, 256]
-            dconv0_2 = lrelu(bn0_2(deconv2d(dconv0_1, 256, 'dconv0_2', 
-                kernel_size=3, strides = 2), self.is_train))
-            print(dconv0_2.get_shape())
-            #output shape: [12, 12, 256]
-            dconv1_1 = lrelu(bn1_1(deconv2d(dconv0_2, 128, 'dconv1_1', 
-                kernel_size=3, strides = 1, padding='valid'), self.is_train))
+            fc1 = fullyConnect(self.fc7_encoder, 7*7*256, 'fc1') # bn0()
+            g_input = tf.reshape(fc1, [-1,7,7,256])
+            #input shape: [7, 7, 256]
+            dconv1_1 = lrelu(bn1_1(deconv2d(g_input, 128, 'dconv1_1', 
+                kernel_size=5, strides = 2), self.is_train))
             #output shape: [14, 14, 128]
-            dconv1_2 = lrelu(bn1_2(deconv2d(dconv1_1, 128, 'dconv1_2', 
+            dconv1_2 = lrelu(bn1_2(deconv2d(dconv1_1, 64, 'dconv1_2', 
                 kernel_size=5, strides = 2), self.is_train))
             #output shape: [28, 28, 128]
             dconv2_1 = lrelu(bn2_1(deconv2d(dconv1_2, 64, 'dconv2_1', 
                 kernel_size=5, strides = 2), self.is_train))
             #output shape: [56, 56, 64]
-            dconv2_2 = lrelu(bn2_2(deconv2d(dconv2_1, 64, 'dconv2_2', 
+            dconv2_2 = lrelu(bn2_2(deconv2d(dconv2_1, 32, 'dconv2_2', 
                 kernel_size=5, strides = 2), self.is_train))
             #output shape: [112, 112, 32]
             dconv3_1 = lrelu(bn3_1(deconv2d(dconv2_2, 32, 'dconv3_1', 
                 kernel_size=5, strides = 2), self.is_train))
             #output shape: [224, 224, 32]
-            dconv3_2 = lrelu(bn3_2(deconv2d(dconv3_1, 32, 'dconv3_2', 
-                kernel_size=5, strides = 1), self.is_train))
-            #output shape: [224, 224, 32]
-            pw_conv = conv2d(dconv3_2, 3, 'pw_conv', kernel_size=1, strides = 1,
+            pw_conv = conv2d(dconv3_1, 3, 'pw_conv', kernel_size=1, strides = 1,
                                   activation = tf.nn.tanh)
             self.texture = (pw_conv + 1) * 127.5
         assert self.texture.get_shape().as_list()[1:] == [224,224,3]

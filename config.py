@@ -20,7 +20,7 @@ flags.DEFINE_boolean('is_train', True, 'train or frontalize test')
 flags.DEFINE_boolean('is_finetune', False, 'finetune') # False
 flags.DEFINE_string('logdir', 'logdir/setting1/setting1_2', 'logs directory')
 flags.DEFINE_string('model_path', 'logdir/setting1/setting1_2-0002-4805', 'finetune model path') #
-flags.DEFINE_integer('batch_size', 16, 'batch size')
+flags.DEFINE_integer('batch_size', 10, 'batch size')
 flags.DEFINE_integer('decay_steps', 100, 'learning rate decay steps')
 flags.DEFINE_integer('epoch', 10, 'epoch')
 flags.DEFINE_integer('train_sum_freq', 400, 'the frequency of saving train summary(step)')
