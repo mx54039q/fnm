@@ -17,17 +17,20 @@ class Net(object):
     def __init__(self):
         self.graph = tf.Graph()
         with self.graph.as_default():
+            self.data_feed = loadData(batch_size=cfg.batch_size, train_shuffle=True) # False
             with tf.variable_scope('vgg'):
                 self.vgg = vgg16.Vgg16()
                 self.vgg.build()
             if cfg.is_train:
-                if cfg.use_profile:
-                    self.profile = tf.placeholder("float", [None, 224, 224, 3], 'profile')
-                else:
-                    self.profile = tf.placeholder("float", [None, 4096], 'profile')
-                self.is_train = tf.placeholder(tf.bool, name='is_train')
-                self.front = tf.placeholder("float", [None, 224, 224, 3], 'front')
+                #if cfg.use_profile:
+                #    self.profile = tf.placeholder("float", [None, 224, 224, 3], 'profile')
+                #else:
+                #    self.profile = tf.placeholder("float", [None, 4096], 'profile')
+                #self.front = tf.placeholder("float", [None, 224, 224, 3], 'front')
                 #self.Y = tf.one_hot(self.labels, depth=10, axis=1, dtype=tf.float32)
+                
+                self.is_train = tf.placeholder(tf.bool, name='is_train')
+                self.profile, self.front = self.data_feed.get_train()
                 
                 self.build_arch()
                 self.loss()
@@ -49,6 +52,12 @@ class Net(object):
                 self.train_dis = tf.train.AdamOptimizer(self.lr, beta1=cfg.beta1).minimize(
                     self.d_loss,
                     global_step=self.global_step, var_list=self.vars_dis)
+            else:
+                self.profile = tf.placeholder("float", [None, 224, 224, 3], 'profile')
+                self.is_train = tf.placeholder(tf.bool, name='is_train')
+                self.front = tf.placeholder("float", [None, 224, 224, 3], 'front')
+                
+                self.build_arch()
                 
         tf.logging.info('Seting up the main structure')
 
@@ -107,34 +116,32 @@ class Net(object):
         assert self.vgg_relu7_recon.get_shape().as_list()[1] == 4096
         
         # Construct discriminator between generalized front face and ground truth
-        real_pf = tf.concat([self.profile, self.front], 3)
-        fake_pf = tf.concat([self.profile, self.texture], 3)
-        self.d_real, self.d_real_logits = self.discriminator(real_pf, reuse=False)
-        self.d_fake, self.d_fake_logits = self.discriminator(fake_pf, reuse=True)
+        #real_pf = tf.concat([self.profile, self.front], 3)
+        #fake_pf = tf.concat([self.profile, self.texture], 3)
+        self.d_real, self.d_real_logits = self.discriminator(self.vgg_pool5_recon, reuse=False)
+        self.d_fake, self.d_fake_logits = self.discriminator(self.vgg_pool5_recon_gt, reuse=True)
         assert self.d_real.get_shape().as_list()[1] == 1
         
     def discriminator(self, images, y=None, reuse=False):
         with tf.variable_scope("discriminator", reuse=reuse) as scope:
             # shape of input images 224 x 224 x 6, concat profile and front face
+            # shape of input images 7 x 7 x 512,
             d_bn1 = batch_norm(name='d_bn1')
             d_bn2 = batch_norm(name='d_bn2')
-            d_bn3 = batch_norm(name='d_bn3')
             
-            images = images / 2 - 127.5
-            h0 = lrelu(conv2d(images, 64, 'd_conv0', kernel_size=5, strides=2))
-            # h0 is (128 x 128 x 64)
-            h1 = lrelu(d_bn1(conv2d(h0, 128, 'd_conv1', kernel_size=5, strides=2), self.is_train))
-            # h1 is (64 x 64 x 128)
-            h2 = lrelu(d_bn2(conv2d(h1, 256, 'd_conv2', kernel_size=5, strides=2), self.is_train))
-            # h2 is (32x 32 x 256)
-            h3 = lrelu(d_bn3(conv2d(h2, 256, 'd_conv3', kernel_size=5, strides=2), self.is_train))
-            # h3 is (16 x 16 x 256)
+            #images = images / 127.5 - 1
+            h0 = lrelu(conv2d(images, 128, 'd_conv0', kernel_size=3))
+            # h0 is (7 x 7 x 128)
+            h1 = lrelu(d_bn1(conv2d(h0, 128, 'd_conv1', kernel_size=3), self.is_train))
+            # h1 is (7 x 7 x 128)
+            h2 = lrelu(d_bn2(conv2d(h1, 256, 'd_conv2', kernel_size=3), self.is_train))
+            # h2 is (7 x 7 x 256)
             dim = 1
-            for d in h3.get_shape().as_list()[1:]:
+            for d in h2.get_shape().as_list()[1:]:
                 dim *= d
-            h4 = fullyConnect(tf.reshape(h3, [-1, dim]), 1, 'd_fc1')
+            h3 = fullyConnect(tf.reshape(h2, [-1, dim]), 1, 'd_fc1')
 
-            return tf.nn.sigmoid(h4), h4
+            return tf.nn.sigmoid(h3), h3
 
     def loss(self):
         with tf.name_scope('loss') as scope:

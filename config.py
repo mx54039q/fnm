@@ -18,8 +18,8 @@ flags.DEFINE_string('train_list', 'mpie/setting1_train.txt', 'train list') # ses
 flags.DEFINE_string('test_list', 'mpie/session01_test3.txt', 'test set path') # lfw/lfw.txt
 flags.DEFINE_boolean('is_train', True, 'train or frontalize test')
 flags.DEFINE_boolean('is_finetune', False, 'finetune') # False
-flags.DEFINE_string('logdir', 'logdir/setting1/setting1_4', 'logs directory')
-flags.DEFINE_string('model_path', 'logdir/setting1/setting1_3-0000-1399', 'finetune model path') #
+flags.DEFINE_string('logdir', 'logdir/setting1/setting1_3', 'logs directory')
+flags.DEFINE_string('model_path', 'logdir/setting1/pre_setting1_3-0000-1399', 'finetune model path') #
 flags.DEFINE_integer('batch_size', 10, 'batch size')
 flags.DEFINE_integer('decay_steps', 100, 'learning rate decay steps')
 flags.DEFINE_integer('epoch', 10, 'epoch')
