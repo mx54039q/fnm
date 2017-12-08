@@ -49,7 +49,11 @@ class loadData(object):
         
         # Flip and crop image
         lf_profile_value = tf.image.random_flip_left_right(profile_value)
-        crop_profile_value = tf.random_crop(lf_profile_value, [cfg.height, cfg.width, 3])
+        #crop_profile_value = tf.random_crop(lf_profile_value, [cfg.height, cfg.width, 3])
+        crop_profile_value = tf.image.crop_to_bounding_box(lf_profile_value, 
+                                                        (cfg.ori_height-cfg.height)/2, 
+                                                        (cfg.ori_width-cfg.width)/2, 
+                                                        cfg.height, cfg.width)
         crop_front_value = tf.image.crop_to_bounding_box(front_value, 
                                                         (cfg.ori_height-cfg.height)/2, 
                                                         (cfg.ori_width-cfg.width)/2, 
@@ -57,8 +61,8 @@ class loadData(object):
         profile, front = tf.train.shuffle_batch([crop_profile_value, crop_front_value],
                                                batch_size=self.batch_size,
                                                num_threads=8,
-                                               capacity=64 * self.batch_size,
-                                               min_after_dequeue=self.batch_size * 32,
+                                               capacity=32 * self.batch_size,
+                                               min_after_dequeue=self.batch_size * 16,
                                                allow_smaller_final_batch=False)
         return tf.cast(profile, tf.float32, 'profile'), tf.cast(front, tf.float32, 'front')
         

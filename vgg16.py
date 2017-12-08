@@ -154,12 +154,12 @@ class Vgg16:
         # output shape: [4096]
         
         with tf.name_scope('fc7'):
-            fc7 = tf.nn.bias_add(tf.matmul(fc6, self.fc7_weights), self.fc7_bias)
+            fc7 = tf.nn.bias_add(tf.matmul(relu6, self.fc7_weights), self.fc7_bias)
         relu7 = tf.nn.relu(fc7)
         # output shape: [4096]
         
         with tf.name_scope('fc8'):
-            fc8 = tf.nn.bias_add(tf.matmul(fc7, self.fc8_weights), self.fc8_bias)
+            fc8 = tf.nn.bias_add(tf.matmul(relu7, self.fc8_weights), self.fc8_bias)
         
         return pool5, relu7 #relu7
 
