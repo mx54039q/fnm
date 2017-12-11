@@ -49,11 +49,11 @@ class loadData(object):
         
         # Flip and crop image
         lf_profile_value = tf.image.random_flip_left_right(profile_value)
-        #crop_profile_value = tf.random_crop(lf_profile_value, [cfg.height, cfg.width, 3])
-        crop_profile_value = tf.image.crop_to_bounding_box(lf_profile_value, 
-                                                        (cfg.ori_height-cfg.height)/2, 
-                                                        (cfg.ori_width-cfg.width)/2, 
-                                                        cfg.height, cfg.width)
+        crop_profile_value = tf.random_crop(lf_profile_value, [cfg.height, cfg.width, 3])
+        #crop_profile_value = tf.image.crop_to_bounding_box(lf_profile_value, 
+        #                                                (cfg.ori_height-cfg.height)/2, 
+        #                                                (cfg.ori_width-cfg.width)/2, 
+        #                                                cfg.height, cfg.width)
         crop_front_value = tf.image.crop_to_bounding_box(front_value, 
                                                         (cfg.ori_height-cfg.height)/2, 
                                                         (cfg.ori_width-cfg.width)/2, 

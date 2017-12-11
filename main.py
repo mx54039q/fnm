@@ -24,7 +24,7 @@ def main(_):
     config.gpu_options.allow_growth = True
     with tf.Session(config=config, graph=net.graph) as sess:
         threads = tf.train.start_queue_runners(sess=sess)
-        saver = tf.train.Saver(max_to_keep=1)
+        saver = tf.train.Saver()
         if cfg.is_finetune:
             saver.restore(sess, cfg.model_path)
             print('Load Model Successfully!')
@@ -57,7 +57,7 @@ def main(_):
                         (fl1/test_num, fl2/test_num))
                     
                 if step == num_batch - 1:
-                    saver.save(sess, cfg.logdir + '-%04d-%02d' % (0, global_step))#
+                    saver.save(sess, cfg.logdir + '-pretrain')#
                 
         # 2. Join GAN loss
         for epoch in range(cfg.epoch):

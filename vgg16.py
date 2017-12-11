@@ -161,7 +161,7 @@ class Vgg16:
         with tf.name_scope('fc8'):
             fc8 = tf.nn.bias_add(tf.matmul(relu7, self.fc8_weights), self.fc8_bias)
         
-        return pool5, relu7 #relu7
+        return pool2, pool5, relu7 #relu7
 
 
     def avg_pool(self, bottom, name):

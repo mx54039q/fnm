@@ -1,13 +1,19 @@
-#MODEL-实验日志:
+#MODEL:
 default: 
-1. 超参:    L1:fea:GAN=1:0.1:0.01, L2规则化0.0001, BatchSize=5, Adam(momenta=0.5), kernel=5, strides=2, L1损失输入的图范围[0,1],
-           权重初始化stddev=0.02
+1. 超参:    L1:fea:GAN=1:0.1:0.01, L2规则化0.0001, BatchSize=5, Adam(momenta=0.5), kernel=5, strides=2, 
+           L1损失输入的图范围[0,1], 权重初始化stddev=0.02, 初始lr=2*e-4(不变),
 2. 生成器G: encoder用vgg, decoder输入relu7层, 全连接为7x7x256(不加BN和relu), 6层deconv(k=5,s=2)加一层conv(k=1,s=1), 激活relu
            输出接tanh归一化, 再转换到[0,255] 
 3. 判别器D: 直接输入G的结果, 并减均值归一化(/127.5-1), 5层conv(k=5,s=2)加1层fc(除了第一层和fc层其余都用BN), 都用lrelu(k=0.2), 
            判别器的真标签为输入侧脸+正脸gt/假标签为输入侧脸+合成正脸
-4. 其它:    mirror, 先训练一个epoch的texture loss再加入GAN loss, 1次D2次G, BN分测试和训练, 初始lr=e-4(不变), 
-           L1损失先将图归一化到[0,1], 判别器损失除以2, 特征余弦损失的输入得先归一化, 
+4. 其它:    mirror, 先训练一个epoch的texture loss再加入GAN loss, 1次D2次G, BN分测试和训练,
+           L1损失先将图归一化到[0,1], 判别器损失除以2, 特征余弦损失的输入得先归一化, 训练图片多线程读取
+
+# 实验日志:
+1. (work)setting1_1: as default, logdir/setting1/setting1_1-0000-11198
+2. (work)settign1_2: 加入桥接结构, 从vgg_relu7全连接出, logdir/setting1/setting1_2-0004-74654
+3. settign1_3: 加入dropout=0.5(G_dec的前两层)
+4. settign1_4: 判别器D从vgg_pool2出发, loss比1:0.01:0.01, 
 
 #FBI WARNING:
 1. Net2.py: 不再通过全连接层将vgg特征转化到(14,14,256), 而是先reshape(4,4,256)再通过deconv操作到(14,14,256);参数量从(4096*14*14*256)减小到
@@ -15,15 +21,17 @@ default:
 
 # TO-DO
 1. 看看GAN是怎么训练的, 加入GAN. done
-2. 人脸加MASK
-3. VGG特征用的是fc7, 而不是relu7. done
+2. 人脸加MASK. doing
+3. VGG特征用的是relu7, 而不是fc7. done
 4. 只转正, 不加vgg loss. done
 5. 试一试MSE. done
 6. 将relu改成lrelu. done
 7. L1损失是否要先归一化(255-1). done
-8. 优化生成器, 学pix2pix用桥接结构
+8. 优化生成器, 学pix2pix用桥接结构. doing
 9. 试一下Wgan的GAN损失函数
-10. dropout
+10. dropout. doing
+11. 正脸监督图片用20个光照的平均脸/或者用当前光照下的正脸图片
+12. 预训练之后减小L1损失的比重
 
 # Setting1
 1. 根据MPIE的setting1协议构建训练集(100*7*20)和测试集(149*6*19)

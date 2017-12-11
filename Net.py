@@ -64,9 +64,9 @@ class Net(object):
     def build_arch(self):
         # Use pretrained model(vgg-face) as encoder of Generator
         with tf.name_scope('vgg_encoder') as scope:
-            self.vgg_pool5, self.vgg_relu7 = self.vgg.forward(self.profile)
-        assert self.vgg_pool5.get_shape().as_list()[1:] == [7, 7, 512]
-        print 'VGG output feature shape:', self.vgg_pool5.get_shape()
+            self.vgg_pool2, _, self.vgg_relu7 = self.vgg.forward(self.profile)
+        assert self.vgg_relu7.get_shape().as_list()[1] == 4096
+        print 'VGG output feature shape:', self.vgg_pool2.get_shape()
         
         # Decoder front face from vgg feature
         self.texture = self.decoder(self.vgg_relu7)
@@ -74,9 +74,9 @@ class Net(object):
         
         # Map texture and ground truth frontal into features again by VGG    
         with tf.name_scope('vgg_encoder_recon'):
-            self.vgg_pool5_recon, self.vgg_relu7_recon = self.vgg.forward(self.texture)
-            self.vgg_pool5_recon_gt, self.vgg_relu7_recon_gt = self.vgg.forward(self.front)
-        assert self.vgg_pool5_recon.get_shape().as_list()[1:] == [7,7,512]
+            self.vgg_pool2_recon, _, self.vgg_relu7_recon = self.vgg.forward(self.texture)
+            self.vgg_pool2_recon_gt, _, self.vgg_relu7_recon_gt = self.vgg.forward(self.front)
+        assert self.vgg_pool2_recon.get_shape().as_list()[1:] == [56,56,128]
         assert self.vgg_relu7_recon.get_shape().as_list()[1] == 4096
         
         # Construct discriminator between generalized front face and ground truth
@@ -94,6 +94,9 @@ class Net(object):
         with tf.variable_scope('decoder', reuse=reuse) as scope:
             # Construct BatchNorm Layer
             #bn0 = batch_norm(name='bn0')
+            #bn0_1 = batch_norm(name='bn0_1')
+            #bn0_2 = batch_norm(name='bn0_2')
+            #bn0_3 = batch_norm(name='bn0_3')
             bn1_1 = batch_norm(name='bn1_1')
             bn1_2 = batch_norm(name='bn1_2')
             bn2_1 = batch_norm(name='bn2_1')
@@ -106,34 +109,49 @@ class Net(object):
             #fc1_reshape = tf.reshape(fc1, [-1,14,14,256])
 
             # Stacked Transpose Convolutions
+            # construct a series of FC layers to concat with deconv layers
             fc1 = fullyConnect(feature, 7*7*256, 'fc1') # bn0()
             g_input = tf.reshape(fc1, [-1,7,7,256])
+            fc2 = fullyConnect(feature, 14*14*4, 'fc2')
+            fc2_ = tf.reshape(fc2, [-1,14,14,4])
+            fc3 = fullyConnect(feature, 28*28*4, 'fc3')
+            fc3_ = tf.reshape(fc3, [-1,28,28,4])
+            fc4 = fullyConnect(feature, 56*56*4, 'fc4')
+            fc4_ = tf.reshape(fc4, [-1,56,56,4])
+            fc5 = fullyConnect(feature, 112*112*2, 'fc5')
+            fc5_ = tf.reshape(fc5, [-1,112,112,2])
             #input shape: [7, 7, 256]
             with tf.variable_scope('dconv1_1'):
                 dconv1_1 = tf.nn.relu(bn1_1(deconv2d(g_input, 128, 'dconv1_1', 
                                       kernel_size=5, strides = 2), self.is_train))
-            #input shape: [14, 14, 128]
+            #dconv1_1 = tf.nn.dropout(dconv1_1, keep_prob = 0.5)    
+            dconv1_1 = tf.concat((dconv1_1, fc2_), axis=3)
+            #output shape: [14, 14, 128 + 4]
             with tf.variable_scope('dconv1_2'):
                 dconv1_2 = tf.nn.relu(bn1_2(deconv2d(dconv1_1, 128, 'dconv1_2', 
                                       kernel_size=5, strides = 2), self.is_train))
-            #output shape: [28, 28, 128]
+            #dconv1_2 = tf.nn.dropout(dconv1_2, keep_prob = 0.5)
+            dconv1_2 = tf.concat((dconv1_2, fc3_), axis=3)
+            #output shape: [28, 28, 128 + 4]
             with tf.variable_scope('dconv2_1'):
                 dconv2_1 = tf.nn.relu(bn2_1(deconv2d(dconv1_2, 64, 'dconv2_1', 
                                       kernel_size=5, strides = 2), self.is_train))
-            #output shape: [56, 56, 64]
+            dconv2_1 = tf.concat((dconv2_1, fc4_), axis=3)                         
+            #output shape: [56, 56, 64 + 4]
             with tf.variable_scope('dconv2_2'):
                 dconv2_2 = tf.nn.relu(bn2_2(deconv2d(dconv2_1, 64, 'dconv2_2', 
                                       kernel_size=5, strides = 2), self.is_train))
-            #output shape: [112, 112, 32]
+            dconv2_2 = tf.concat((dconv2_2, fc5_), axis=3)
+            #output shape: [112, 112, 32 + 2]
             with tf.variable_scope('dconv3_1'):
                 dconv3_1 = tf.nn.relu(bn3_1(deconv2d(dconv2_2, 32, 'dconv3_1', 
                                       kernel_size=5, strides = 2), self.is_train))
-            with tf.variable_scope('dconv3_2'):
-                dconv3_2 = tf.nn.relu(bn3_2(deconv2d(dconv3_1, 32, 'dconv3_2', 
-                                      kernel_size=5, strides = 1), self.is_train))
+            #with tf.variable_scope('dconv3_2'):
+            #    dconv3_2 = tf.nn.relu(bn3_2(deconv2d(dconv3_1, 32, 'dconv3_2', 
+            #                          kernel_size=5, strides = 1), self.is_train))
             #output shape: [224, 224, 32]
             with tf.variable_scope('pw_conv'):
-                pw_conv = conv2d(dconv3_2, 3, 'pw_conv', kernel_size=1, strides = 1,
+                pw_conv = conv2d(dconv3_1, 3, 'pw_conv', kernel_size=1, strides = 1,
                                  activation = tf.nn.tanh)
             texture = (pw_conv + 1) * 127.5
         
@@ -142,7 +160,7 @@ class Net(object):
     def discriminator(self, images, y=None, reuse=False):
         with tf.variable_scope("discriminator", reuse=reuse) as scope:
             # shape of input images 224 x 224 x 6, concat profile and front face
-            # shape of input images 7 x 7 x 1024,
+            # shape of input images 56 x 56 x 256,
             d_bn1 = batch_norm(name='d_bn1')
             d_bn2 = batch_norm(name='d_bn2')
             d_bn3 = batch_norm(name='d_bn3')
@@ -159,11 +177,11 @@ class Net(object):
                 h2 = lrelu(d_bn2(conv2d(h1, 128, 'd_conv2', kernel_size=5, strides=2), self.is_train))
             # h2 is (28 x 28 x 128)
             with tf.variable_scope('d_conv3'):
-                h3 = lrelu(d_bn3(conv2d(h2, 256, 'd_conv3', kernel_size=5, strides=2), self.is_train))
-            # h4 is (14 x 14 x 256)
+                h3 = lrelu(d_bn3(conv2d(h2, 128, 'd_conv3', kernel_size=5, strides=2), self.is_train))
+            # h4 is (14 x 14 x 128)
             with tf.variable_scope('d_conv4'):
-                h4 = lrelu(d_bn4(conv2d(h3, 256, 'd_conv4', kernel_size=5, strides=2), self.is_train))
-            # h4 is (7 x 7 x 256)
+                h4 = lrelu(d_bn4(conv2d(h3, 128, 'd_conv4', kernel_size=5, strides=2), self.is_train))
+            # h4 is (7 x 7 x 128)
             #dim_wh, dim_c = h2.get_shape().as_list()[1], h2.get_shape().as_list()[3]
             h5 = fullyConnect(tf.reshape(h4, [cfg.batch_size, -1]), 1, 'd_fc1')
 
