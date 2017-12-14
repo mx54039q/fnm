@@ -61,8 +61,8 @@ class loadData(object):
         profile, front = tf.train.shuffle_batch([crop_profile_value, crop_front_value],
                                                batch_size=self.batch_size,
                                                num_threads=8,
-                                               capacity=32 * self.batch_size,
-                                               min_after_dequeue=self.batch_size * 16,
+                                               capacity=64 * self.batch_size,
+                                               min_after_dequeue=self.batch_size * 32,
                                                allow_smaller_final_batch=False)
         return tf.cast(profile, tf.float32, 'profile'), tf.cast(front, tf.float32, 'front')
         
