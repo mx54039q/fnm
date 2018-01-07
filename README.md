@@ -14,12 +14,13 @@ default:
 2. (work)settign1_2: 加入桥接结构, 从vgg_relu7全连接出4个连接到卷积层上, logdir/setting1/setting1_2-0004-74654
 3. settign1_3: 加入dropout=0.5(G_dec的前两层)
 4. settign1_4: 判别器D从vgg_pool2出发, loss比1:0.01:0.01,
-5. settign1_5: 人脸模型用resnet50, loss比1:0.03:0.01, 判别器patchGAN, G_dec最后一层k3s1
+5. settign1_5: 人脸模型用resnet50, loss比1:0.1:0.01, 判别器patchGAN, 判别器的直接输入合成正脸/正脸gt
 6. settign1_6: 人脸模型用resnet50, loss比1:0.03:0.01, 判别器patchGAN, G_dec新结构
+7. lfw_1: 
 
 #FBI WARNING:
 1. Net2.py: 不再通过全连接层将vgg特征转化到(14,14,256), 而是先reshape(4,4,256)再通过deconv操作到(14,14,256);参数量从(4096*14*14*256)减小到
-4. 之前的效果不好来自于对fc1层加了BN
+2. 之前的效果不好来自于对fc1层加了BN
 
 # TO-DO
 1. 看看GAN是怎么训练的, 加入GAN. done
@@ -37,6 +38,7 @@ default:
 13. 将输入侧脸mirror前后的特征相加作为G_enc的输出(这样的话要将预处理的mirror取消)
 14. 第一次G/D一起训练
 15. 调整结构, 前端卷积网络下采样/res模块/后端卷积网络上采样
+16. 加入noize向量
 
 # Setting1
 1. 根据MPIE的setting1协议构建训练集(100*7*20)和测试集(149*6*19)

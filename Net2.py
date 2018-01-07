@@ -125,10 +125,8 @@ class Net(object):
             #output shape: [7, 7, 512]
             res2 = res_block(res1, 'res2', self.is_train)
             #output shape: [7, 7, 512]
-            res3 = res_block(res2, 'res3', self.is_train)
-            #output shape: [7, 7, 512]
             with tf.variable_scope('dconv1_1'):
-                dconv1_1 = tf.nn.relu(bn1_1(deconv2d(res3, 256, 'dconv1_1', 
+                dconv1_1 = tf.nn.relu(bn1_1(deconv2d(res2, 256, 'dconv1_1', 
                                       kernel_size=4, strides = 2), self.is_train))
             #ouput shape: [14, 14, 256]
             with tf.variable_scope('dconv1_2'):
@@ -208,7 +206,7 @@ class Net(object):
                 predictions=enc_fea_recon_norm, dim=1)
             #self.feature_loss = tf.losses.mean_squared_error(labels=self.enc_fea_recon_gt,
             #                                                 predictions=self.enc_fea_recon)
-            tf.add_to_collection('losses', self.feature_loss)                 
+            #tf.add_to_collection('losses', self.feature_loss)                 
             
             # 3. L2 Regulation Loss
             self.l2_loss = tf.reduce_sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))

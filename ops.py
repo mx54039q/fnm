@@ -4,9 +4,6 @@ import numpy as np
 import tensorflow as tf
 from config import cfg
 
-#def bn(x,is_train=True):
-#    return tf.layers.batch_normalization(x,epsilon=1e-5,momentum=0.9,
-#        training=is_train)
 class batch_norm(object):
   def __init__(self, epsilon=1e-5, momentum = 0.9, name="batch_norm"):
     with tf.variable_scope(name):
@@ -14,7 +11,7 @@ class batch_norm(object):
       self.momentum = momentum
       self.name = name
   def __call__(self, x, is_train=True):
-    return tf.contrib.layers.batch_norm(x,
+    return tf.nn.batch_normalization(x,
                       decay=self.momentum, 
                       updates_collections=None,
                       epsilon=self.epsilon,

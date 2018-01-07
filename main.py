@@ -39,11 +39,11 @@ def main(_):
         
         # 1. Only texture loss and feature loss
         if not cfg.is_finetune:
-            for step in range(num_batch):
+            for step in range(num_batch/2):
                 global_step = sess.run(net.global_step)
                 _, lf1, lf2, lr = sess.run([net.train_texture,net.front_loss,net.feature_loss,net.lr],
                     {net.is_train:True})
-                print('Pretrain-Step: %d, Front Loss:%.4f, Feature Loss:%.4f, gs:%d' % 
+                print('Warm Up: %d, Front Loss:%.4f, Feature Loss:%.4f, gs:%d' % 
                     (step, lf1, lf2, global_step))
 
                 if step % cfg.test_sum_freq == 0:
@@ -51,7 +51,7 @@ def main(_):
                     for i in range(test_num):
                         te_profile, te_front = net.data_feed.get_test_batch(cfg.batch_size)
                         fl1_, fl2_, images = sess.run([net.front_loss,net.feature_loss,net.texture],
-                            {net.profile:te_profile, net.front:te_front, net.is_train:True})
+                            {net.profile:te_profile, net.front:te_front, net.is_train:False})
                         net.data_feed.save_images(images, 0)
                         fl1 += fl1_; fl2 += fl2_
                     print('Testing: Front Loss:%.4f, Feature Loss:%.4f' % 
@@ -80,7 +80,7 @@ def main(_):
                     for i in range(test_num):
                         te_profile, te_front = net.data_feed.get_test_batch(cfg.batch_size)
                         dl_, gl_, fl_, fl2_, images = sess.run([net.d_loss,net.g_loss,net.front_loss,net.feature_loss,net.texture],
-                            {net.profile:te_profile, net.front:te_front, net.is_train:True})
+                            {net.profile:te_profile, net.front:te_front, net.is_train:False})
                         net.data_feed.save_images(images, epoch)
                         dl += dl_; gl += gl_; fl += fl_; fl2 += fl2_
                     print('Testing: Front Loss:%.4f, Fea Loss:%.3f, D Loss:%.4f, G Loss:%.4f' % 

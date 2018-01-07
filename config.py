@@ -16,7 +16,7 @@ flags.DEFINE_float('lambda_gan', 0.01, 'down weight of the loss for gan loss') #
 # For training
 flags.DEFINE_integer('dataset_size', 14000, 'number of images in the dataset') # 120000
 flags.DEFINE_string('data_path', '/home/ycqian/session01_align', 'dataset path') # /home/pris/Videos/session01_align
-flags.DEFINE_string('train_list', 'mpie/setting1_train2.txt', 'train list') # session01_train_shuffle.txt
+flags.DEFINE_string('train_list', 'mpie/setting1_train.txt', 'train list') # session01_train2.txt
 flags.DEFINE_string('test_list', 'mpie/session01_test2.txt', 'test set path') # lfw/lfw.txt
 flags.DEFINE_boolean('is_train', True, 'train or frontalize test')
 flags.DEFINE_boolean('is_finetune', False, 'finetune') # False, True
@@ -32,7 +32,7 @@ flags.DEFINE_integer('save_freq', 100, 'the frequency of saving model(epoch)')
 flags.DEFINE_boolean('use_profile', True, 'Use profile image or profile feature') #
 flags.DEFINE_boolean('mask_with_y', True, 'use the true label to mask out target capsule or not')
 flags.DEFINE_boolean('crop', True, 'Crop image to target size')
-flags.DEFINE_float('lr', 0.0002, 'base learning rate')
+flags.DEFINE_float('lr', 0.002, 'base learning rate')
 flags.DEFINE_float('beta1', 0.5, 'momentum term of adam')
 flags.DEFINE_float('stddev', 0.02, 'stddev for W initializer')
 
