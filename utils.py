@@ -25,11 +25,7 @@ class loadData(object):
         self.test_list = np.loadtxt(cfg.test_list, dtype='string',delimiter=',')
         self.test_index = 0
         
-        self.crop_box = [13,13,237,237]
-        if not cfg.use_profile:
-            self.f_train = open(cfg.train_list.split('.')[0]+'_feature', 'r') #
-            self.f_test = open(cfg.test_list.split('.')[0]+'_feature', 'r') #
-            
+        self.crop_box = [13,13,237,237]            
         assert Image.open(os.path.join(cfg.data_path, self.test_list[0,0])).size == \
             (cfg.ori_width, cfg.ori_height)
     
@@ -38,9 +34,9 @@ class loadData(object):
         get train images by pipeline
         '''
         profile_list = [cfg.data_path+'/'+img for img in self.train_list[:,0]]
-        front_list = [cfg.data_path+'/'+img for img in self.train_list[:,1]]
-        profile_files = tf.train.string_input_producer(profile_list, shuffle=False)
-        front_files = tf.train.string_input_producer(front_list, shuffle=False)
+        front_list = [cfg.front_path+'/'+img for img in self.train_list[:,1]]
+        profile_files = tf.train.string_input_producer(profile_list, shuffle=True) #
+        front_files = tf.train.string_input_producer(front_list, shuffle=True) #
         
         key1, profile_value = tf.WholeFileReader().read(profile_files)
         profile_value = tf.image.decode_jpeg(profile_value, channels=3) 
@@ -49,22 +45,26 @@ class loadData(object):
         
         # Flip and crop image
         lf_profile_value = tf.image.random_flip_left_right(profile_value)
-        crop_profile_value = tf.random_crop(lf_profile_value, [cfg.height, cfg.width, 3])
-        #crop_profile_value = tf.image.crop_to_bounding_box(lf_profile_value, 
-        #                                                (cfg.ori_height-cfg.height)/2, 
-        #                                                (cfg.ori_width-cfg.width)/2, 
-        #                                                cfg.height, cfg.width)
+        
+        #crop_profile_value = tf.random_crop(lf_profile_value, [cfg.height, cfg.width, 3])
+        crop_profile_value = tf.image.crop_to_bounding_box(lf_profile_value, 
+                                                        (cfg.ori_height-cfg.height)/2, 
+                                                        (cfg.ori_width-cfg.width)/2, 
+                                                        cfg.height, cfg.width)
         crop_front_value = tf.image.crop_to_bounding_box(front_value, 
                                                         (cfg.ori_height-cfg.height)/2, 
                                                         (cfg.ori_width-cfg.width)/2, 
                                                         cfg.height, cfg.width)
-        profile, front = tf.train.shuffle_batch([crop_profile_value, crop_front_value],
-                                               batch_size=self.batch_size,
-                                               num_threads=8,
-                                               capacity=64 * self.batch_size,
-                                               min_after_dequeue=self.batch_size * 32,
-                                               allow_smaller_final_batch=False)
-        return tf.cast(profile, tf.float32, 'profile'), tf.cast(front, tf.float32, 'front')
+        resized_56 = tf.image.resize_images(crop_front_value, [56, 56],method=0)
+        resized_112 = tf.image.resize_images(crop_front_value, [112, 112],method=0)
+        profile, front,resized_56,resized_112 = tf.train.shuffle_batch([crop_profile_value, crop_front_value, resized_56, resized_112],
+                                                batch_size=self.batch_size,
+                                                num_threads=8,
+                                                capacity=64 * self.batch_size,
+                                                min_after_dequeue=self.batch_size * 32,
+                                                allow_smaller_final_batch=False)
+        return tf.cast(profile, tf.float32, 'profile'), tf.cast(front, tf.float32, 'front'), \
+               tf.cast(resized_56, tf.float32, 'resized_56'), tf.cast(resized_112, tf.float32, 'resized_112')
         
     def get_train_batch(self):
         '''
@@ -184,7 +184,14 @@ class loadData(object):
             except:
                 Image.fromarray(imgs[i]).save(os.path.join(save_path, 
                     self.test_list[test_size+i+self.test_index-img_num][0]))
-
+    def save_train(self, imgs):
+        imgs = imgs.astype('uint8')  # inverse_transform
+        img_num = imgs.shape[0]
+        save_path = 'train_imgs'
+        if not os.path.exists(save_path):
+            os.mkdir(save_path)
+        for i in range(imgs.shape[0]):
+            Image.fromarray(imgs[i]).save(os.path.join(save_path, 'imgs_' + str(i) + '.jpg'))
 if __name__ == '__main__':
     def f1():
         '''

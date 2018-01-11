@@ -11,7 +11,7 @@ class batch_norm(object):
       self.momentum = momentum
       self.name = name
   def __call__(self, x, is_train=True):
-    return tf.nn.batch_normalization(x,
+    return tf.contrib.layers.batch_norm(x,
                       decay=self.momentum, 
                       updates_collections=None,
                       epsilon=self.epsilon,

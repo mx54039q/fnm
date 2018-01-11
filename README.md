@@ -4,7 +4,7 @@ default:
            L1损失输入的图范围[0,1], 权重初始化stddev=0.02, 初始lr=2*e-4(不变),
 2. 生成器G: (G的enc一般用lrelu,dec用RELU)encoder用vgg, decoder输入relu7层, 全连接为7x7x256(不加BN和relu), 
            6层deconv(k=5,s=2)加一层conv(k=1,s=1), 激活relu, 输出接tanh归一化再转换到[0,255]
-3. 判别器D: 直接输入G的结果, 并减均值归一化(/127.5-1), 5层conv(k=5,s=2)加1层fc(除了第一层和fc层其余都用BN), 都用lrelu(k=0.2), 
+3. 判别器D: 直接输入G的结果, 并减均值归一化(/127.5-1), 5层conv(k=4,s=2)加1层fc(除了第一层和fc层其余都用BN), 都用lrelu(k=0.2), 
            判别器的真标签为输入侧脸+正脸gt/假标签为输入侧脸+合成正脸
 4. 其它:    mirror, 随机crop成224, 先训练一个epoch的texture loss再加入GAN loss, 1次D2次G, BN分测试和训练,
            L1损失先将图归一化到[0,1], 判别器损失除以2, 特征余弦损失的输入得先归一化, 训练图片多线程读取
@@ -14,9 +14,11 @@ default:
 2. (work)settign1_2: 加入桥接结构, 从vgg_relu7全连接出4个连接到卷积层上, logdir/setting1/setting1_2-0004-74654
 3. settign1_3: 加入dropout=0.5(G_dec的前两层)
 4. settign1_4: 判别器D从vgg_pool2出发, loss比1:0.01:0.01,
-5. settign1_5: 人脸模型用resnet50, loss比1:0.1:0.01, 判别器patchGAN, 判别器的直接输入合成正脸/正脸gt
+5. settign1_5: 人脸模型用resnet50, 判别器patchGAN, 判别器的直接输入合成正脸/正脸gt
 6. settign1_6: 人脸模型用resnet50, loss比1:0.03:0.01, 判别器patchGAN, G_dec新结构
-7. lfw_1: 
+7. settign1_7: 人脸模型用resnet50, loss比1:0.001:0.01, 判别器patchGAN, G_dec新结构, 去除L1损失, 余弦距离损失(输入侧脸和生成正脸), 
+               GAN损失(生成正脸和随机真实正脸)
+7. lfw_1: 人脸模型resnet50, 中心crop
 
 #FBI WARNING:
 1. Net2.py: 不再通过全连接层将vgg特征转化到(14,14,256), 而是先reshape(4,4,256)再通过deconv操作到(14,14,256);参数量从(4096*14*14*256)减小到
