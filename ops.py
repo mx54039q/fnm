@@ -4,6 +4,25 @@ import numpy as np
 import tensorflow as tf
 from config import cfg
 
+def ins_norm(feas, epsilon=1e-8, name="ins_norm"):
+     '''
+     instance channel-wise normalization from "PROGRESSIVE GROWING OF GANS FOR
+     IMPROVED QUALITY, STABILITY, AND VARIATION"
+     '''
+     norm_axis = len(feas.get_shape()) - 1
+     statis = tf.reduce_mean(tf.square(feas), axis = norm_axis, keep_dims = True)
+     statis = tf.sqrt(statis + epsilon)
+     return tf.div(feas, statis)
+    
+def ins_norm2(feas, epsilon=1e-8, name="ins_norm"):
+     '''
+     instance normalization from ""
+     '''
+     norm_axis = len(feas.get_shape()) - 1
+     statis = tf.reduce_mean(tf.square(feas), axis = norm_axis, keep_dims = True)
+     statis = tf.sqrt(statis + epsilon)
+     return tf.div(feas, statis)
+     
 class batch_norm(object):
   def __init__(self, epsilon=1e-5, momentum = 0.9, name="batch_norm"):
     with tf.variable_scope(name):

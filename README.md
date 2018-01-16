@@ -18,6 +18,7 @@ default:
 6. settign1_6: 人脸模型用resnet50, loss比1:0.03:0.01, 判别器patchGAN, G_dec新结构
 7. settign1_7: 人脸模型用resnet50, loss比1:0.001:0.01, 判别器patchGAN, G_dec新结构, 去除L1损失, 余弦距离损失(输入侧脸和生成正脸), 
                GAN损失(生成正脸和随机真实正脸)
+8. setting1_8: 人脸模型用resnet50, patch-LSGAN, 
 7. lfw_1: 人脸模型resnet50, 中心crop
 
 #FBI WARNING:

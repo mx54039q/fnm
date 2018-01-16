@@ -48,9 +48,9 @@ def main(_):
         # 1. Only texture loss and feature loss
         if 0:
         #not cfg.is_finetune:
-            for step in range(num_batch/2):
+            for step in range(num_batch/4):
                 global_step = sess.run(net.global_step)
-                _, lf1, lf2, lr = sess.run([net.train_texture,net.front_loss,net.feature_loss,net.lr],
+                _, lf1, lf2 = sess.run([net.train_texture,net.front_loss,net.feature_loss],
                     {net.is_train:True})
                 print('Warm Up: %d, Front Loss:%.4f, Feature Loss:%.4f, gs:%d' % 
                     (step, lf1, lf2, global_step))
@@ -59,7 +59,7 @@ def main(_):
                     fl1, fl2 = 0, 0
                     for i in range(test_num):
                         te_profile, te_front = net.data_feed.get_test_batch(cfg.batch_size)
-                        fl1_, fl2_, images = sess.run([net.front_loss,net.feature_loss,net.texture],
+                        fl1_, fl2_, images = sess.run([net.front_loss,net.feature_loss,net.texture_224],
                             {net.profile:te_profile, net.front:te_front, net.is_train:False})
                         net.data_feed.save_images(images, 0)
                         fl1 += fl1_; fl2 += fl2_
