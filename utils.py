@@ -10,13 +10,15 @@ import struct
 from config import cfg
 
 class loadData(object):
-    '''
-    Load Data from image. 
-    args:
+    """
+    Load Data from image by pipeline. 
+    """
+    def __init__(self, batch_size = 100, train_shuffle = True):
+        """
+        args:
         batch_size: size of every train batch
         train_shuffle: whether shuffle the train set
-    '''
-    def __init__(self, batch_size = 100, train_shuffle = True):
+        """
         self.batch_size = batch_size
         self.train_list = np.loadtxt(cfg.train_list, dtype='string',delimiter=',')
         if train_shuffle:
@@ -30,53 +32,62 @@ class loadData(object):
             (cfg.ori_width, cfg.ori_height)
     
     def get_train(self):
-        '''
+        """
         get train images by pipeline
-        '''
-        #profile_list = [cfg.data_path+'/'+img for img in self.train_list[:,0]]
-        #front_list = [cfg.front_path+'/'+img for img in self.train_list[:,1]]
-        profile = np.loadtxt('mpie/session01_profile.txt',dtype='string')
+        return:
+            profile: profile of identity A
+            gt: ground truth front face of identity A
+            front: real front face of identity B
+            resized_56: 1/4 size face resized from front
+            resized_112: 1/2 size face resized from front
+        """
+        profile_list = [cfg.data_path+'/'+img for img in self.train_list[:,0]]
+        gt_list = [cfg.data_path+'/'+img for img in self.train_list[:,1]]
         front = np.loadtxt('mpie/casia_front.txt',dtype='string')
-        profile_list = [cfg.data_path+'/'+img for img in profile]
         front_list = [cfg.front_path+'/'+img for img in front]
         
-        profile_files = tf.train.string_input_producer(profile_list, shuffle=True) #
+        profile_files = tf.train.string_input_producer(profile_list, shuffle=False) #
+        gt_files = tf.train.string_input_producer(gt_list, shuffle=False) #
         front_files = tf.train.string_input_producer(front_list, shuffle=True) #
         
-        key1, profile_value = tf.WholeFileReader().read(profile_files)
-        profile_value = tf.image.decode_jpeg(profile_value, channels=3) 
-        key1, front_value = tf.WholeFileReader().read(front_files)
+        _, profile_value = tf.WholeFileReader().read(profile_files)
+        profile_value = tf.image.decode_jpeg(profile_value, channels=3)
+        _, gt_value = tf.WholeFileReader().read(gt_files)
+        gt_value = tf.image.decode_jpeg(gt_value, channels=3) 
+        _, front_value = tf.WholeFileReader().read(front_files)
         front_value = tf.image.decode_jpeg(front_value, channels=3) 
         
         # Flip and crop image
         lf_profile_value = tf.image.random_flip_left_right(profile_value)
-        
         crop_profile_value = tf.random_crop(lf_profile_value, [cfg.height, cfg.width, 3])
-        #crop_profile_value = tf.image.crop_to_bounding_box(lf_profile_value, 
-        #                                                (cfg.ori_height-cfg.height)/2, 
-        #                                                (cfg.ori_width-cfg.width)/2, 
-        #                                                cfg.height, cfg.width)
+        crop_gt_value = tf.image.crop_to_bounding_box(gt_value, 
+                                                     (cfg.ori_height-cfg.height)/2, 
+                                                     (cfg.ori_width-cfg.width)/2, 
+                                                     cfg.height, cfg.width)
         crop_front_value = tf.image.crop_to_bounding_box(front_value, 
                                                         (cfg.ori_height-cfg.height)/2, 
                                                         (cfg.ori_width-cfg.width)/2, 
                                                         cfg.height, cfg.width)
         resized_56 = tf.image.resize_images(crop_front_value, [56, 56],method=0)
         resized_112 = tf.image.resize_images(crop_front_value, [112, 112],method=0)
-        profile, front,resized_56,resized_112 = tf.train.shuffle_batch([crop_profile_value, crop_front_value, resized_56, resized_112],
+        profile,gt,front,resized_56,resized_112 = tf.train.shuffle_batch(
+                                                [crop_profile_value,crop_gt_value,crop_front_value,resized_56,resized_112],
                                                 batch_size=self.batch_size,
                                                 num_threads=8,
                                                 capacity=32 * self.batch_size,
                                                 min_after_dequeue=self.batch_size * 16,
                                                 allow_smaller_final_batch=False)
-        return tf.cast(profile, tf.float32, 'profile'), tf.cast(front, tf.float32, 'front'), \
-               tf.cast(resized_56, tf.float32, 'resized_56'), tf.cast(resized_112, tf.float32, 'resized_112')
+        return tf.cast(profile, tf.float32, 'profile'), tf.cast(gt, tf.float32, 'ground_truth'), \
+               tf.cast(front, tf.float32, 'front'), tf.cast(resized_56, tf.float32, 'resized_56'), \
+               tf.cast(resized_112, tf.float32, 'resized_112')
         
     def get_train_batch(self):
-        '''
+        """
         get train images by batch
         return:
-            train profile images and front images
-        '''
+            trX: training profile images
+            trY: training front images
+        """
         trX = np.zeros((self.batch_size, cfg.height, cfg.width, 3), dtype=np.float32)
         trY = np.zeros((self.batch_size, cfg.height, cfg.width, 3), dtype=np.float32)
         for i in range(self.batch_size):
@@ -88,16 +99,17 @@ class loadData(object):
                 trX[i] = self.read_image(self.train_list[i +self.train_index][0], flip=True)
                 trY[i] = self.read_image(self.train_list[i +self.train_index][1], flip=True)
         self.train_index += self.batch_size
-        return(trX, trY)
+        return (trX, trY)
         
     def get_test_batch(self, batch_size = cfg.batch_size):
-        '''
+        """
         get test images by batch
         args:
             batch size
         return:
-            test profile images and front images
-        '''
+            teX: testing profile images
+            teY: testing front images
+        """
         teX = np.zeros((batch_size, cfg.height, cfg.width, 3), dtype=np.float32)
         teY = np.zeros((batch_size, cfg.height, cfg.width, 3), dtype=np.float32)
         for i in range(batch_size):
@@ -112,9 +124,13 @@ class loadData(object):
         return(teX, teY)
 
     def read_image(self, img, flip=False):
-        '''
+        """
         read single image, crop to target size and random flip horizontally
-        '''
+        args:
+            img: image path
+        return:
+            img: data matrix from image
+        """
         img = Image.open(img)
         if flip and np.random.random() > 0.5:
             img = img.transpose(Image.FLIP_LEFT_RIGHT)
@@ -123,11 +139,11 @@ class loadData(object):
         return np.array(img, dtype=np.float32)
         
     def save_images(self, imgs, epoch=0):
-        '''
+        """
         args:
             imgs: [batch_size, img_height, img_width, img_chanel], image pixels need
             to be normalized between [-1, 1]
-        '''
+        """
         imgs = imgs.astype('uint8')  # inverse_transform
         img_num = imgs.shape[0]
         test_size = self.test_list.shape[0]
@@ -141,9 +157,11 @@ class loadData(object):
             except:
                 Image.fromarray(imgs[i]).save(os.path.join(save_path, 
                     self.test_list[test_size+i+self.test_index-img_num]))
-        
                     
     def save_train(self, imgs):
+        """
+        save images in training process
+        """
         imgs = imgs.astype('uint8')  # inverse_transform
         img_num = imgs.shape[0]
         save_path = 'train_imgs'
@@ -151,11 +169,12 @@ class loadData(object):
             os.mkdir(save_path)
         for i in range(imgs.shape[0]):
             Image.fromarray(imgs[i]).save(os.path.join(save_path, 'imgs_' + str(i) + '.jpg'))
+            
 if __name__ == '__main__':
     def f1():
-        '''
+        """
         label images with label/session/pose/illuminatio/express
-        '''
+        """
         l = np.loadtxt('images.txt',dtype='string')
         l = pd.DataFrame(l,columns=['name'])
         l['label'] = 1; l['exp'] = 1; l['pose'] = '051'; l['ill'] = '07'; l['sess'] = '01'
@@ -169,9 +188,9 @@ if __name__ == '__main__':
         l.to_csv('session01.csv',index=false)
         
     def f2():
-        '''
+        """
         divide into train set and test set according to setting 1 of MIPE
-        '''
+        """
         #images = pd.read_csv('session01.csv',dtype='string')
         images = pd.read_csv('session01.csv')
         images = images[images.exp == 1]
@@ -194,17 +213,17 @@ if __name__ == '__main__':
                     f.flush()    
     
     def f2():
-        '''
+        """
         get the ground true of the test images
-        '''
+        """
         images = os.listdir('session01_img/')
         for name in images:
             os.system('cp /home/pris/Videos/session01_align/'+name+' session01_img/gt/')
             
     def f3():
-        '''
+        """
         extract image features by VGG-FACE
-        '''
+        """
         def read_img(img):
             img = Image.open(os.path.join('/home/prisVideos/session01_align', img))
             img = img.crop((13,13,237,237))

@@ -2,17 +2,17 @@ import tensorflow as tf
 
 flags = tf.app.flags
 
-
 ############################
 #    hyper parameters      #
 ############################
 
 # For separate margin loss
-flags.DEFINE_float('lambda_l1', 0, 'down weight of the loss for L1 texture loss') #
-flags.DEFINE_float('lambda_fea', 1, 'down weight of the loss for face model feature loss') #
-flags.DEFINE_float('lambda_reg', 1, 'down weight of the loss for L2 regularitaion loss') #
-flags.DEFINE_float('lambda_gan', 1, 'down weight of the loss for gan loss') #
-flags.DEFINE_float('lambda_sym', 0.01, 'down weight of the loss for gan loss') #
+flags.DEFINE_float('lambda_l1', 1., 'weight of the loss for L1 texture loss') #
+flags.DEFINE_float('lambda_fea', 0.01, 'weight of the loss for face model feature loss') #
+flags.DEFINE_float('lambda_reg', 0.00001, 'weight of the loss for L2 regularitaion loss') #
+flags.DEFINE_float('lambda_gan', 1, 'weight of the loss for gan loss') #
+flags.DEFINE_float('lambda_sym', 0., 'weight of the loss for gan loss') #
+flags.DEFINE_float('lambda_gp', 100, 'weight of the loss for gradient penalty on parameter of D') #
 
 # For training
 flags.DEFINE_integer('dataset_size', 120000, 'number of images in the dataset') # 120000
@@ -23,23 +23,22 @@ flags.DEFINE_string('train_list', 'mpie/session01_train.txt', 'train list') # se
 flags.DEFINE_string('test_list', 'mpie/session01_test2.txt', 'test set path') # lfw/lfw.txt
 flags.DEFINE_boolean('is_train', True, 'train or frontalize test')
 flags.DEFINE_boolean('is_finetune', False, 'finetune') # False, True
-flags.DEFINE_string('logdir', 'logdir/setting1/setting1_8', 'model directory') #setting1/setting1_5
-flags.DEFINE_string('summary_dir', 'log/setting1_8', 'logs directory') # setting1_5
-flags.DEFINE_string('model_path', 'logdir/setting1/setting1_8-08', 'finetune model path') #
-flags.DEFINE_integer('batch_size', 5, 'batch size')
+flags.DEFINE_string('logdir', 'logdir/setting1/setting1_1', 'model directory') #setting1/setting1_5
+flags.DEFINE_string('summary_dir', 'log/setting1_1', 'logs directory') # setting1_5
+flags.DEFINE_string('model_path', 'logdir/setting1/setting1_1-00', 'finetune model path') #
+flags.DEFINE_integer('batch_size', 8, 'batch size')
 flags.DEFINE_integer('decay_steps', 100, 'learning rate decay steps')
 flags.DEFINE_integer('epoch', 5, 'epoch')
+flags.DEFINE_integer('critic', 5, 'number of D training times')
 flags.DEFINE_integer('train_sum_freq', 400, 'the frequency of saving train summary(step)')
 flags.DEFINE_integer('test_sum_freq', 30, 'the frequency of saving test summary(step)')
-flags.DEFINE_integer('save_freq', 100, 'the frequency of saving model(epoch)')
-flags.DEFINE_boolean('use_profile', True, 'Use profile image or profile feature') #
-flags.DEFINE_boolean('mask_with_y', True, 'use the true label to mask out target capsule or not')
+flags.DEFINE_integer('save_freq', 500, 'the frequency of saving model')
 flags.DEFINE_boolean('crop', True, 'Crop image to target size')
-flags.DEFINE_float('lr', 0.0002, 'base learning rate')
-flags.DEFINE_float('beta1', 0, 'beta1 momentum term of adam')
-flags.DEFINE_float('beta2', 0.99, 'beta2 momentum term of adam')
+flags.DEFINE_float('lr', 0.0002, 'base learning rate') #
+flags.DEFINE_float('beta1', 0.5, 'beta1 momentum term of adam')
+flags.DEFINE_float('beta2', 0.9, 'beta2 momentum term of adam')
 flags.DEFINE_float('stddev', 0.02, 'stddev for W initializer')
-
+flags.DEFINE_boolean('use_bias', False, 'whether to use bias')
 
 ############################
 #   environment setting    #

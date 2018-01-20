@@ -18,25 +18,22 @@ def ins_norm2(feas, epsilon=1e-8, name="ins_norm"):
      '''
      instance normalization from ""
      '''
-     norm_axis = len(feas.get_shape()) - 1
-     statis = tf.reduce_mean(tf.square(feas), axis = norm_axis, keep_dims = True)
-     statis = tf.sqrt(statis + epsilon)
-     return tf.div(feas, statis)
+     raise NotImplementedError
      
 class batch_norm(object):
-  def __init__(self, epsilon=1e-5, momentum = 0.9, name="batch_norm"):
-    with tf.variable_scope(name):
-      self.epsilon  = epsilon
-      self.momentum = momentum
-      self.name = name
-  def __call__(self, x, is_train=True):
-    return tf.contrib.layers.batch_norm(x,
-                      decay=self.momentum, 
-                      updates_collections=None,
-                      epsilon=self.epsilon,
-                      scale=True,
-                      is_training=is_train,
-                      scope=self.name)
+    def __init__(self, epsilon=1e-5, momentum = 0.9, name="batch_norm"):
+        with tf.variable_scope(name):
+           self.epsilon  = epsilon
+           self.momentum = momentum
+           self.name = name
+    def __call__(self, x, is_train=True):
+        return tf.contrib.layers.batch_norm(x,
+                        decay=self.momentum, 
+                        updates_collections=None,
+                        epsilon=self.epsilon,
+                        scale=True,
+                        is_training=is_train,
+                        scope=self.name)
 
 class batch_norm_mosv(object):
     def __init__(self, mosv_dict, name="batch_norm"):
@@ -47,7 +44,7 @@ class batch_norm_mosv(object):
             self.scale = mosv_dict['scale']
             self.variance = mosv_dict['variance']
             self.epsilon = 1e-5
-    def __call__(self, x, is_train=True):
+    def __call__(self, x):
         return tf.nn.batch_normalization(x, 
                                          mean=self.mean, 
                                          variance=self.variance, 
@@ -65,7 +62,7 @@ def local(x,filters,name,kernel_size=3,strides=[1,1],padding='valid'):
                  padding=padding,
                  kernel_initializer=tf.truncated_normal_initializer(stddev=cfg.stddev))(x)
             
-def conv2d(inputs, filters, name, kernel_size = 3, strides = 1, padding='same',
+def conv2d(inputs, filters, name, kernel_size = 3, strides = 1, padding='same', bias=cfg.use_bias,
            dilation_rate = 1, trainable = True, activation = None, reuse = False):
     return tf.layers.conv2d(inputs, filters = filters,
              kernel_size = kernel_size,
@@ -75,12 +72,13 @@ def conv2d(inputs, filters, name, kernel_size = 3, strides = 1, padding='same',
              activation = activation,
              trainable = trainable,
              reuse = reuse,
+             use_bias = bias,
              kernel_initializer = tf.truncated_normal_initializer(stddev=cfg.stddev),
              kernel_regularizer = tf.contrib.layers.l2_regularizer(0.0001),
              name = name)
 
 def deconv2d(inputs, filters, name, kernel_size = 3, strides = 1, padding='same',
-           trainable = True, activation = None, reuse = False):
+           trainable = True, activation = None, reuse = False, bias=cfg.use_bias):
     return tf.layers.conv2d_transpose(inputs, filters = filters,
              kernel_size = kernel_size,
              padding = padding,
@@ -88,6 +86,7 @@ def deconv2d(inputs, filters, name, kernel_size = 3, strides = 1, padding='same'
              activation = activation,
              trainable = trainable,
              reuse = reuse,
+             use_bias = bias,
              kernel_initializer = tf.truncated_normal_initializer(stddev=cfg.stddev),
              kernel_regularizer = tf.contrib.layers.l2_regularizer(0.0001),
              name = name)
@@ -117,19 +116,20 @@ def deconv2d_w(input_, output_shape,
         else:
             return deconv
 
-def fullyConnect(inputs, units, name, trainable = True, activation = None, reuse = False):
+def fullyConnect(inputs, units, name, bias=cfg.use_bias, trainable = True, activation = None, reuse = False):
     return tf.layers.dense(inputs, units = units,
              kernel_initializer = tf.truncated_normal_initializer(stddev=cfg.stddev),
              kernel_regularizer = tf.contrib.layers.l2_regularizer(0.0001),
              activation = activation,
              trainable = trainable,
+             use_bias = bias,
              reuse = reuse,
              name = name)
              
 def lrelu(x, leak=0.2, name="lrelu"):
     return tf.maximum(x, leak*x)
 
-def res_block(inputs, name, is_train, kernel_size = 3, strides = 1, padding='same'):
+def res_block(inputs, name, is_train, kernel_size = 3, strides = 1, padding='same', bias=cfg.use_bias):
     with tf.variable_scope(name):
         bn1 = batch_norm(name='bn1')
         bn2 = batch_norm(name='bn2')
@@ -138,6 +138,7 @@ def res_block(inputs, name, is_train, kernel_size = 3, strides = 1, padding='sam
                  kernel_size = kernel_size,
                  padding = padding,
                  strides = strides,
+                 bias=bias,
                  kernel_initializer = tf.truncated_normal_initializer(stddev=cfg.stddev),
                  kernel_regularizer = tf.contrib.layers.l2_regularizer(0.0001),
                  name='conv1')
@@ -146,6 +147,7 @@ def res_block(inputs, name, is_train, kernel_size = 3, strides = 1, padding='sam
                  kernel_size = kernel_size,
                  padding = padding,
                  strides = strides,
+                 bias=bias,
                  kernel_initializer = tf.truncated_normal_initializer(stddev=cfg.stddev),
                  kernel_regularizer = tf.contrib.layers.l2_regularizer(0.0001),
                  name='conv2')
