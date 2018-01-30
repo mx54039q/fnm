@@ -20,15 +20,16 @@ class loadData(object):
         train_shuffle: whether shuffle the train set
         """
         self.batch_size = batch_size
-        self.train_list = np.loadtxt(cfg.train_list, dtype='string',delimiter=',')
+        self.profile = np.loadtxt(cfg.profile_list, dtype='string',delimiter=',')
+        self.front = np.loadtxt(cfg.front_list,dtype='string',delimiter=',')
         if train_shuffle:
-            np.random.shuffle(self.train_list)
+            np.random.shuffle(self.profile)
         
-        self.test_list = np.loadtxt(cfg.test_list, dtype='string',delimiter=',')[:,0] #
+        self.test_list = np.loadtxt(cfg.test_list, dtype='string',delimiter=',') #
         self.test_index = 0
         
         self.crop_box = [13,13,237,237]            
-        assert Image.open(os.path.join(cfg.data_path, self.train_list[0,0])).size == \
+        assert Image.open(os.path.join(cfg.profile_path, self.profile[0])).size == \
             (cfg.ori_width, cfg.ori_height)
     
     def get_train(self):
@@ -41,11 +42,10 @@ class loadData(object):
             resized_56: 1/4 size face resized from front
             resized_112: 1/2 size face resized from front
         """
-        profile_list = [cfg.data_path+'/'+img for img in self.train_list[:,0]]
-        gt_list = [cfg.data_path+'/'+img for img in self.train_list[:,1]]
-        front = np.loadtxt('mpie/casia_front.txt',dtype='string')
-        front_list = [cfg.front_path+'/'+img for img in front]
-        
+        profile_list = [cfg.profile_path+'/'+img for img in self.profile] #
+        gt_list = profile_list
+        #gt_list = [cfg.data_path+'/'+img for img in self.train_list[:,1]]
+        front_list = [cfg.front_path+'/'+img for img in self.front]
         profile_files = tf.train.string_input_producer(profile_list, shuffle=False) #
         gt_files = tf.train.string_input_producer(gt_list, shuffle=False) #
         front_files = tf.train.string_input_producer(front_list, shuffle=True) #
@@ -152,12 +152,11 @@ class loadData(object):
             os.mkdir(save_path)
         for i in range(imgs.shape[0]):
             try:
-                Image.fromarray(imgs[i]).save(os.path.join(save_path, 
-                    self.test_list[i +self.test_index-img_num]))
+                img_name = self.test_list[i + self.test_index - img_num].split('/')[1]
             except:
-                Image.fromarray(imgs[i]).save(os.path.join(save_path, 
-                    self.test_list[test_size+i+self.test_index-img_num]))
-                    
+                img_name = self.test_list[test_size + i + self.test_index - img_num].split('/')[1]
+            Image.fromarray(imgs[i]).save(os.path.join(save_path, img_name))
+            
     def save_train(self, imgs):
         """
         save images in training process

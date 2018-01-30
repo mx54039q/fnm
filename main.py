@@ -3,8 +3,8 @@ import os
 import tensorflow as tf
 from config import cfg
 #from LSGAN import LSGAN
-from WGAN import WGAN
-#from WGAN_GP import WGAN_GP
+#from WGAN import WGAN
+from WGAN_GP2 import WGAN_GP
 
 # Training Setting
 test_num = 180 / cfg.batch_size
@@ -17,7 +17,7 @@ def arr2str(arr):
     return s
     
 def main(_):
-    net = WGAN() #
+    net = WGAN_GP() #
     if not os.path.exists(cfg.results):
         os.mkdir(cfg.results)
         
@@ -37,11 +37,12 @@ def main(_):
         _,summary_str = sess.run([net.train_dis,net.train_summary], {net.is_train:True})
         writer.add_summary(summary_str)
 
-        #fd_results = open('fd_results.txt', 'w')   
+        #fd_results = open('gradient.txt', 'w')   
         
         # 1. Warm-Up: GAN loss not included
-        if not cfg.is_finetune:
-            for step in range(3000):
+        if 0:
+        #not cfg.is_finetune:
+            for step in range(1000):
                 _,fl,fl2,gs,gen = sess.run([net.train_wu,net.feature_loss,net.front_loss,
                                            net.global_step,net.texture_224], {net.is_train:True})
                 print('Warm-Up-%d:, Fea Loss:%.3f, Front Loss:%.3f, gs:%d' % (step,fl,fl2,gs))
@@ -53,9 +54,9 @@ def main(_):
                         images = sess.run(net.texture_224,{net.profile:te_profile, net.front:te_front, net.is_train:True})
                         net.data_feed.save_images(images, 0)
                     print('Testing')
-        saver.save(sess, cfg.logdir + '-wu')#
+            saver.save(sess, cfg.logdir + '-wu')#
                     
-        # 2. Train by minibatch and critic equals to 5
+        # 2. Train by minibatch and critic
         for epoch in range(cfg.epoch):
             for step in range(num_batch):                
                 # Discriminator Part
@@ -64,16 +65,16 @@ def main(_):
                 else:
                     critic = cfg.critic
                 for i in range(critic):
-                    _,dl,real,fake = sess.run([net.train_dis,net.d_loss,net.dr_224,net.df_224],
+                    g,_,dl,real,fake = sess.run([net.gradient,net.train_dis,net.d_loss,net.dr,net.df],
                                                    {net.is_train:True}) # net.clip_D,
-                #fd_results.write('real:'+arr2str(real)+' fake:'+arr2str(fake)+'\n')
+                #fd_results.write('%d,%f\n' % (step,g))
                 #fd_results.flush()
                 
                 # Generative Part
                 _,fl,fl2,gl,gs,gen = sess.run([net.train_gen,net.feature_loss,net.front_loss,net.g_loss,\
-                                              net.global_step,net.texture_224], {net.is_train:True})
-                print('Epoch-Step: %d-%d, Fea Loss:%.3f, Front Loss:%.3f, D Loss:%.3f, G Loss:%.3f, gs:%d' % 
-                    (epoch, step, fl, fl2, dl, gl, gs))
+                                              net.global_step,net.texture], {net.is_train:True})
+                print('Epoch-Step: %d-%d, Fea Loss:%.3f, Front Loss:%.3f, D Loss:%.3f, G Loss:%.3f, gs:%d, g:%.3f' % 
+                    (epoch, step, fl, fl2, dl, gl, gs,g))
                 
                 if step % cfg.test_sum_freq == 0:
                     net.data_feed.save_train(gen)
@@ -81,7 +82,7 @@ def main(_):
                     for i in range(test_num):
                         te_profile, te_front = net.data_feed.get_test_batch(cfg.batch_size)
                         dl_, gl_, fl_,fl2_, images,real,fake = sess.run([net.d_loss,net.g_loss,\
-                            net.feature_loss,net.front_loss, net.texture_224, net.dr_224,net.df_224],
+                            net.feature_loss,net.front_loss, net.texture, net.dr,net.df],
                             {net.profile:te_profile, net.front:te_front, net.is_train:True})
                         net.data_feed.save_images(images, epoch)
                         dl += dl_; gl += gl_; fl += fl_; fl2 += fl2_

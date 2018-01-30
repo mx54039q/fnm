@@ -1,17 +1,20 @@
 #MODEL:
 default: 
-1. 超参:    l1:fea:GAN:sym=1:1:1:1, L2规则化0.0001, BatchSize=5, Adam(0.5,0.9), kernel=4, strides=2, 
+1. 超参:    l1:fea:GAN:sym=0:500:1:0, L2规则化0.0001, BatchSize=5, Adam(0.5,0.9), kernel=4, strides=2, 
            左右对称损失输入的图范围[0,1], 权重初始化stddev=0.02, 初始lr=2*e-4(不变),
-2. 生成器G: (G的enc一般用lrelu,dec用RELU)encoder用vgg2, decoder为全卷积网络, ins_norm+relu, 第一层和最后一层不加ins norm
+2. 生成器G: (G的enc一般用lrelu,dec用RELU)encoder用vgg2, decoder为全卷积网络, pixel_norm+relu, 第一层和最后一层不加PN
            三个大小的生成器协同训练, 原始特征join到每个生成器的开始
 3. 判别器D: patchGAN, 直接输入G的结果, 并减均值归一化(/127.5-1), 激活函数用lrelu(k=0.2), 三个尺度的D对应三个G, 第一层和最后一层不加ins norm
-4. 其它:    mirror, 随机crop成224, 1次D2次G, 特征余弦损失的输入得先归一化, 训练图片多线程读取, ins norm代替BN, 生成器输入样本和正脸样本不匹配,
+4. 其它:    mirror, 随机crop成224, critic=5, 特征余弦损失的输入得先归一化, 训练图片多线程读取, ins norm代替BN, 生成器输入样本和正脸样本不匹配,
            
 
 # 实验日志:
 1. setting1_8: WGAN, critic=5, 
 2. setting1_1: WGAN, critic=5, 加入正脸GT绝对值损失, 
-9. wgan_gp_0: wgan-gp, critic=5, D中PN代替BN(D中不能有BN), 
+3. (work)setting1_2: WGAN-GP(w_gp=10), critic=1, Layer-Norm, RMS 
+4. (work)setting1_3: LSGAN, critic=1, 加入正脸GT绝对值损失, beat1=0.5, 
+5. (work)setting1_4: WGAN-GP2(w_gp=10), critic=1, adam(0,.9), 人脸五块区域各设一个判别器(全部/眼/鼻/嘴/脸), 判别器LayerNorm
+6. setting1_5: WGAN-GP2(w_gp=10), critic=1, adam(0,.9), 人脸五块区域各设一个判别器(全部/眼/鼻/嘴/脸), 判别器LayerNorm, 侧脸使用casia
 
 #FBI WARNING:
 1. Net2.py: 不再通过全连接层将vgg特征转化到(14,14,256), 而是先reshape(4,4,256)再通过deconv操作到(14,14,256);参数量从(4096*14*14*256)减小到

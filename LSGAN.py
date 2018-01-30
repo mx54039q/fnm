@@ -17,7 +17,7 @@ class LSGAN(object):
     3. 对应G有三个尺度的独立的判别器, 输入先进行减均值归一化, BN和LReLU, 第一层和最后一层不用BN, 全卷积网络(k4s2)
     4. G损失函数:VGG特征余弦距离/MSE距离/人脸水平对称; D损失函数:MSE距离
     5. 2个优化器Adam(beta1=0.5, beta2=0.9), lr_G=lr_D, 
-    6. D的参数强制截断[-0.01,0.01], 注意是截断所有参数
+    6. D的参数强制截断[-0.01,0.01], 注意是截断D所有参数
     7. 两个网络的L2规则化
     """
     def __init__(self):
@@ -160,14 +160,11 @@ class LSGAN(object):
                                         kernel_size=4, strides = 2)))
             #output shape: [224, 224, 32]
             with tf.variable_scope('cw_conv_56'):
-                gen_56 = tf.nn.tanh(conv2d(dconv5, 3, 'pw_conv', kernel_size=4, strides = 1,
-                                 bias=False))
+                gen_56 = tf.nn.tanh(conv2d(dconv5, 3, 'pw_conv', kernel_size=4, strides = 1,))
             with tf.variable_scope('cw_conv_112'):
-                gen_112 = tf.nn.tanh(conv2d(dconv6, 3, 'pw_conv', kernel_size=4, strides = 1,
-                                 bias=False))
+                gen_112 = tf.nn.tanh(conv2d(dconv6, 3, 'pw_conv', kernel_size=4, strides = 1,))
             with tf.variable_scope('cw_conv_224'):
-                gen_224 = tf.nn.tanh(conv2d(dconv7, 3, 'pw_conv', kernel_size=4, strides = 1,
-                                 bias=False))
+                gen_224 = tf.nn.tanh(conv2d(dconv7, 3, 'pw_conv', kernel_size=4, strides = 1,))
         
             return (gen_56+1)*127.5, (gen_112+1)*127.5, (gen_224+1)*127.5
         
@@ -209,7 +206,7 @@ class LSGAN(object):
                 with tf.variable_scope('d_conv5'):
                     d0_h5 = lrelu(d0_bn5(conv2d(d0_h4, 256, 'd_conv5', kernel_size=4, strides=2)))
                 # h5 is (4 x 4 x 256)
-                d0_h6 = conv2d(d0_h5, 1, 'd_conv6', kernel_size=4, strides=1, padding='valid', bias=False)
+                d0_h6 = conv2d(d0_h5, 1, 'd_conv6', kernel_size=4, strides=1, padding='valid')
                 # h6 is (1 x 1 x 1)
                 
             with tf.variable_scope("dis_1"):
@@ -234,7 +231,7 @@ class LSGAN(object):
                 with tf.variable_scope('d_conv4'):
                     d1_h4 = lrelu(d1_bn4(conv2d(d1_h3, 256, 'd_conv4', kernel_size=4, strides=2)))
                 # h4 is (4 x 4 x 256)
-                d1_h5 = conv2d(d1_h4, 1, 'd_conv5', kernel_size=4, strides=1, padding='valid', bias=False)
+                d1_h5 = conv2d(d1_h4, 1, 'd_conv5', kernel_size=4, strides=1, padding='valid')
                 # h5 is (1 x 1 x 1)
                 
             with tf.variable_scope("dis_2"):
@@ -255,7 +252,7 @@ class LSGAN(object):
                 with tf.variable_scope('d_conv3'):
                     d2_h3 = lrelu(d2_bn3(conv2d(d2_h2, 256, 'd_conv3', kernel_size=4, strides=2)))
                 # h3 is (4 x 4 x 256)
-                d2_h4 = conv2d(d2_h3, 1, 'd_conv4', kernel_size=4, strides=1, padding='valid', bias=False)
+                d2_h4 = conv2d(d2_h3, 1, 'd_conv4', kernel_size=4, strides=1, padding='valid')
                 # h4 is (1 x 1 x 1)
                 
         return tf.nn.sigmoid(d2_h4), d2_h4, tf.nn.sigmoid(d1_h5), d1_h5, tf.nn.sigmoid(d0_h6), d0_h6
