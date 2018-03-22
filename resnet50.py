@@ -225,7 +225,7 @@ class Resnet50(object):
         # Clear the model dict
         self.data_dict = None
         
-    def forward(self, rgb):
+    def forward(self, rgb, scope = 'resnet50'):
         """
         forword pass 
         args:
@@ -234,12 +234,12 @@ class Resnet50(object):
             conv5_3: output of second last layer before pooling. [7, 7, 2048]
             pool5_7x7_s1: output of pool5 layer. [2048]
         """
-        with tf.name_scope('resnet50'):
+        with tf.name_scope(scope):
             # Convert RGB to BGR as VGG model do
+            assert rgb.get_shape().as_list()[1] == 224
+            assert rgb.get_shape().as_list()[2] == 224
+            assert rgb.get_shape().as_list()[3] == 3
             red, green, blue = tf.split(axis=3, num_or_size_splits=3, value=rgb)
-            assert red.get_shape().as_list()[1:] == [224, 224, 1]
-            assert green.get_shape().as_list()[1:] == [224, 224, 1]
-            assert blue.get_shape().as_list()[1:] == [224, 224, 1]
             bgr = tf.concat(axis=3, values=[
                 blue - VGG_MEAN[0],
                 green - VGG_MEAN[1],
@@ -412,7 +412,7 @@ class Resnet50(object):
             # output shape: [2048]
             assert pool5_7x7_s1.get_shape().as_list()[1:] == [2048]
         
-        return conv5_3, pool5_7x7_s1
+        return conv3_4, conv4_6, conv5_3, pool5_7x7_s1 # 28,14,7,1
 
 
     def avg_pool(self, bottom, name):

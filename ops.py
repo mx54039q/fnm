@@ -3,23 +3,33 @@ import math
 import numpy as np 
 import tensorflow as tf
 from config import cfg
+import tensorflow.contrib.slim as slim
 
-def ins_norm(feas, epsilon=1e-8, name="ins_norm"):
-     '''
-     instance channel-wise normalization from "PROGRESSIVE GROWING OF GANS FOR
-     IMPROVED QUALITY, STABILITY, AND VARIATION"
-     '''
-     norm_axis = len(feas.get_shape()) - 1
-     statis = tf.reduce_mean(tf.square(feas), axis = norm_axis, keep_dims = True)
-     statis = tf.sqrt(statis + epsilon)
-     return tf.div(feas, statis)
+def ins_norm(input, reuse=True, name="in"):
+    with tf.variable_scope(name, reuse=reuse):
+        eps = 1e-5
+        mean, sigma = tf.nn.moments(input, [1, 2], keep_dims=True)
+        normalized = (input - mean) / (tf.sqrt(sigma) + eps)
+    return normalized
     
-def ins_norm2(feas, epsilon=1e-8, name="ins_norm"):
-     '''
-     instance normalization from ""
-     '''
-     raise NotImplementedError
-     
+def pixel_norm(x, train=True, name="pn"):
+    '''
+    pixel channel-wise normalization from "PROGRESSIVE GROWING OF GANS FOR
+    IMPROVED QUALITY, STABILITY, AND VARIATION"
+    '''
+    with tf.variable_scope(name):
+        norm_axis = len(x.get_shape()) - 1
+        return x * tf.rsqrt(tf.reduce_mean(tf.square(x), axis=norm_axis, keep_dims=True) + 1e-8)
+
+def bn(x, train=True, name="bn", epsilon=1e-5, momentum = 0.9):
+    return tf.contrib.layers.batch_norm(x,
+                    decay=momentum, 
+                    updates_collections=None,
+                    epsilon=epsilon,
+                    scale=True,
+                    is_training=train,
+                    scope=name)
+                           
 class batch_norm(object):
     def __init__(self, epsilon=1e-5, momentum = 0.9, name="batch_norm"):
         with tf.variable_scope(name):
@@ -129,27 +139,21 @@ def fullyConnect(inputs, units, name, bias=cfg.use_bias, trainable = True, activ
 def lrelu(x, leak=0.2, name="lrelu"):
     return tf.maximum(x, leak*x)
 
-def res_block(inputs, name, is_train, kernel_size = 3, strides = 1, padding='same', bias=cfg.use_bias):
+def res_block(inputs, name, is_train, normal='bn',kernel_size = 3, strides = 1, padding='same', bias=cfg.use_bias):
     with tf.variable_scope(name):
-        bn1 = batch_norm(name='bn1')
-        bn2 = batch_norm(name='bn2')
-        filters = inputs.get_shape().as_list()[3]
-        conv1 = tf.layers.conv2d(inputs, filters = filters,
-                 kernel_size = kernel_size,
-                 padding = padding,
-                 strides = strides,
-                 bias=bias,
-                 kernel_initializer = tf.truncated_normal_initializer(stddev=cfg.stddev),
-                 kernel_regularizer = tf.contrib.layers.l2_regularizer(0.0001),
-                 name='conv1')
-        conv1_bn = bn1(conv1, is_train)
-        conv2 = tf.layers.conv2d(tf.nn.relu(conv1_bn), filters = filters,
-                 kernel_size = kernel_size,
-                 padding = padding,
-                 strides = strides,
-                 bias=bias,
-                 kernel_initializer = tf.truncated_normal_initializer(stddev=cfg.stddev),
-                 kernel_regularizer = tf.contrib.layers.l2_regularizer(0.0001),
-                 name='conv2')
-        conv2_bn = bn2(conv2, is_train)
-        return tf.nn.relu(tf.add(inputs, conv2_bn))
+        norm = bn if(normal=='bn') else pixel_norm 
+        filters = inputs.get_shape().as_list()[-1]
+        conv1 = tf.nn.relu(norm(conv2d(inputs, filters, 'conv1', 
+                                kernel_size=kernel_size, strides = strides),is_train,'norm1'))
+        conv2 = norm(conv2d(conv1, filters, 'conv2', 
+                                kernel_size=kernel_size, strides = strides),is_train,'norm2')
+        return tf.nn.relu(tf.add(inputs, conv2))
+
+def res_block_ln(inputs, name, kernel_size = 3, strides = 1, padding='same', bias=cfg.use_bias):
+    with tf.variable_scope(name):
+        filters = inputs.get_shape().as_list()[-1]
+        conv1 = tf.nn.relu(slim.layer_norm(conv2d(inputs, filters, 'conv1', 
+                                kernel_size=kernel_size, strides = strides)))
+        conv2 = slim.layer_norm(conv2d(conv1, filters, 'conv2', 
+                                kernel_size=kernel_size, strides = strides))     
+        return tf.nn.relu(tf.add(inputs, conv2))
