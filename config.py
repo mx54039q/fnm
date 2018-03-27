@@ -7,8 +7,8 @@ flags = tf.app.flags
 ############################
 
 # For separate margin loss
-flags.DEFINE_float('lambda_l1', 0.00, 'weight of the loss for L1 texture loss') # 0.1
-flags.DEFINE_float('lambda_fea', 100, 'weight of the loss for face model feature loss') # 250
+flags.DEFINE_float('lambda_l1', 0.01, 'weight of the loss for L1 texture loss') # 0.1
+flags.DEFINE_float('lambda_fea', 250, 'weight of the loss for face model feature loss') # 250
 flags.DEFINE_float('lambda_reg', 1e-6, 'weight of the loss for L2 regularitaion loss') # 1e-5
 flags.DEFINE_float('lambda_gan', 1, 'weight of the loss for gan loss') # 1
 flags.DEFINE_float('lambda_sym', 0., 'weight of the loss for gan loss') #
@@ -26,9 +26,9 @@ flags.DEFINE_string('test_path', '/home/ycqian/lfw-deepfunneled', 'test set path
 flags.DEFINE_string('test_list', 'lfw/lfw_test.txt', 'test set path') # lfw/lfw_test.txt
 flags.DEFINE_boolean('is_train', True, 'train or frontalize test')
 flags.DEFINE_boolean('is_finetune', False, 'finetune') # False, True
-flags.DEFINE_string('logdir', 'logdir/setting1/setting1_7', 'model directory') #setting1/setting1_5
-flags.DEFINE_string('summary_dir', 'log/setting1_7', 'logs directory') # setting1_5
-flags.DEFINE_string('model_path', 'logdir/setting1/setting1_7', 'finetune model path') #
+flags.DEFINE_string('logdir', 'logdir/setting1/setting1_8', 'model directory') #setting1/setting1_5
+flags.DEFINE_string('summary_dir', 'log/setting1_8', 'logs directory') # setting1_5
+flags.DEFINE_string('model_path', 'logdir/setting1/setting1_8', 'finetune model path') #
 flags.DEFINE_integer('batch_size', 8, 'batch size')
 flags.DEFINE_integer('decay_steps', 100, 'learning rate decay steps')
 flags.DEFINE_integer('epoch', 5, 'epoch')
@@ -37,7 +37,7 @@ flags.DEFINE_integer('train_sum_freq', 400, 'the frequency of saving train summa
 flags.DEFINE_integer('test_sum_freq', 200, 'the frequency of saving test summary(step)')
 flags.DEFINE_integer('save_freq', 500, 'the frequency of saving model')
 flags.DEFINE_boolean('crop', True, 'Crop image to target size')
-flags.DEFINE_float('lr', 2e-4, 'base learning rate') #
+flags.DEFINE_float('lr', 1e-4, 'base learning rate') #
 flags.DEFINE_float('beta1', 0., 'beta1 momentum term of adam')
 flags.DEFINE_float('beta2', 0.9, 'beta2 momentum term of adam')
 flags.DEFINE_float('stddev', 0.02, 'stddev for W initializer')

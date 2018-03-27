@@ -20,6 +20,7 @@ class WGAN_GP(object):
     7. critic = 1
     8. Lg:侧脸P通过enc和dec生成正脸P', 两者构成VGG余弦距离和对抗损失; 正脸F通过enc和dec生成正脸F', 两者构成VGG余弦距离\像素的L1损失\对抗损失
     9. Ld:对抗损失 \ 梯度惩罚
+    10. 损失比 L1:fea:gan:gp = 0.01:250:1:10
     """
     def __init__(self):
         self.graph = tf.Graph()
@@ -124,7 +125,7 @@ class WGAN_GP(object):
             norm = bn if(cfg.norm=='bn') else pixel_norm
             
             feat28,feat14,feat7,pool5 = feature[0],feature[1],feature[2],feature[3]
-                        
+            
             g_input = tf.reshape(fullyConnect(pool5, 4*4*512, 'fc0'), [-1, 4, 4, 512])
             #ouput shape: [4, 4, 512]
             with tf.variable_scope('dconv1'):
@@ -134,19 +135,19 @@ class WGAN_GP(object):
             #ouput shape: [7, 7, 256]
             with tf.variable_scope('dconv2'):
                 feat7 = tf.nn.relu(norm(conv2d(feat7, 256, 'feat7', kernel_size=1),self.is_train,'norm2_1'))
-                dconv2 = tf.nn.relu(norm(deconv2d(tf.concat((res1,feat7),axis=3), 128, 'dconv2', 
+                dconv2 = tf.nn.relu(norm(deconv2d((tf.concat(res1_3,feat7),axis=3), 128, 'dconv2', 
                                         kernel_size=4, strides = 2),self.is_train,'norm2_2'))
             res2 = res_block(dconv2, 'res2',self.is_train, cfg.norm)
             #ouput shape: [14, 14, 128]
             with tf.variable_scope('dconv3'):
-                feat14 = tf.nn.relu(norm(conv2d(feat14, 128, 'feat14', kernel_size=1),self.is_train,'norm3_1'))
-                dconv3 = tf.nn.relu(norm(deconv2d(tf.concat((res2,feat14),axis=3), 64, 'dconv2', 
+                #feat14 = tf.nn.relu(norm(conv2d(feat14, 128, 'feat14', kernel_size=1),self.is_train,'norm3_1'))
+                dconv3 = tf.nn.relu(norm(deconv2d(res2, 64, 'dconv2', 
                                         kernel_size=4, strides = 2),self.is_train,'norm3_2'))
             res3 = res_block(dconv3, 'res3',self.is_train, cfg.norm)
             #output shape: [28, 28, 64]
             with tf.variable_scope('dconv4'):
-                feat28 = tf.nn.relu(norm(conv2d(feat28, 64, 'feat28', kernel_size=1),self.is_train,'norm4_1'))
-                dconv4 = tf.nn.relu(norm(deconv2d(tf.concat((res3,feat28),axis=3), 64, 'dconv4', 
+                #feat28 = tf.nn.relu(norm(conv2d(feat28, 64, 'feat28', kernel_size=1),self.is_train,'norm4_1'))
+                dconv4 = tf.nn.relu(norm(deconv2d(res3, 64, 'dconv4', 
                                         kernel_size=4, strides = 2),self.is_train,'norm4_2'))
             res4 = res_block(dconv4, 'res4',self.is_train, cfg.norm)
             #output shape: [56, 56, 64]
@@ -299,8 +300,8 @@ class WGAN_GP(object):
           
             # 2. Feature Loss: Cosine-Norm / L2-Norm
             with tf.name_scope('Perceptual_Loss'):
-                feature_loss = 0.8*(1 - tf.reduce_sum(tf.multiply(pool5_p_norm, pool5_gen_p_norm), [1])) + \
-                               0.2*(1 - tf.reduce_sum(tf.multiply(pool5_f_norm, pool5_gen_f_norm), [1]))
+                feature_loss = 0.9*(1 - tf.reduce_sum(tf.multiply(pool5_p_norm, pool5_gen_p_norm), [1])) + \
+                               0.1*(1 - tf.reduce_sum(tf.multiply(pool5_f_norm, pool5_gen_f_norm), [1]))
                 self.feature_loss = tf.reduce_mean(feature_loss) #/ 2 
                 tf.add_to_collection('losses', self.feature_loss)
             
@@ -319,8 +320,11 @@ class WGAN_GP(object):
             
             # 4. Adversarial Loss
             with tf.name_scope('Adversarial_Loss'):
-                self.d_loss = tf.reduce_mean(tf.add_n(self.df1)*0.8 + tf.add_n(self.df2)*0.2 - tf.add_n(self.dr)) / 10
-                self.g_loss = - tf.reduce_mean(tf.add_n(self.df1)*0.8 + tf.add_n(self.df2)*0.2) / 5
+                if 0: #MODE == 'lsgan':
+                    self.g_loss = tf.reduce_mean((self.df1 - 1)**2)
+                    self.d_loss = (tf.reduce_mean((self.dr - 1)**2) + tf.reduce_mean((self.df1 - 0)**2))/2.
+                self.d_loss = tf.reduce_mean(tf.add_n(self.df1)*0.9 + tf.add_n(self.df2)*0.1 - tf.add_n(self.dr)) / 5
+                self.g_loss = - tf.reduce_mean(tf.add_n(self.df1)*0.9 + tf.add_n(self.df2)*0.1) / 5
                 tf.add_to_collection('losses', self.d_loss)
                 tf.add_to_collection('losses', self.g_loss)
             
