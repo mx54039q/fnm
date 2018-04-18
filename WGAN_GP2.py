@@ -11,15 +11,20 @@ epsilon = 1e-9
 
 class WGAN_GP(object):
     """
-    setting1_6: 
+    setting1_9: 
     1. 使用pipeline读取训练图片
-    2. G_enc为VGG2, G_dec为全卷积网络, PN(BN)和ReLU, 最后一层不用PN, 上采样反卷积(k4s2), 输出接tanh并归一化到[0,255]
-    3. D: 对应人脸先验知识有五个部分的判别器, 输入先进行减均值归一化, LayerNorm和LReLU, 第一层和最后一层不用LN, 全卷积网络(k4s2)最后全连接到1
-    4. G损失函数:VGG特征余弦距离/Wassertein距离/伪正脸监督; D损失函数:Wassertein距离/GP梯度惩罚
-    5. 判别器生成器用ADAM(0., 0.99), lr_G=lr_D, 
+    2. G_enc为VGG2输出conv5(7x7x2048), G_dec全卷积网络(1x1卷积到512维,4个残差,连续反卷积+残差,用BN和ReLU
+    3. D: 对应人脸先验知识有五个部分的判别器, 输入先进行减均值归一化, LayerNorm和LReLU, 全卷积网络(k4s2)最后全连接到1
+    5. 判别器生成器用ADAM(0., 0.99), lr_G=lr_D=1e-4, 
     6. 两个网络的L2规则化
     7. critic = 1
-    8. fea:gab:gp:reg = 250:1:10:1e-6
+    8. Lg:侧脸P通过enc和dec生成正脸P', 两者构成VGG余弦距离和对抗损失; 正脸F通过enc和dec生成正脸F', 两者构成VGG余弦距离\像素的L1损失\对抗损失
+    9. Ld:对抗损失 \ 梯度惩罚
+    10. 损失比 L1:fea:gan:gp = 0.01:250:1:10, 其中P:F=0.8:0.2
+    11. 生成器网络结构变化
+    12. casia侧脸和casia正脸预训练生成多样化正脸, 再缩小lr10倍casia侧脸和MPIE正脸生成归一化正脸
+    modified:
+    VGG距离改成欧式距离且: L1:fea:gan:gp = 0.01:0.01:1:10
     """
     def __init__(self):
         self.graph = tf.Graph()
@@ -53,7 +58,7 @@ class WGAN_GP(object):
                     self.grad1 = tf.reduce_mean(tf.sqrt(tf.reduce_sum(tf.square(grad1), [1,2,3])))
                     grad2 = tf.gradients([self.g_loss], [self.gen_p])[0]
                     self.grad2 = tf.reduce_mean(tf.sqrt(tf.reduce_sum(tf.square(grad2), [1,2,3])))
-                    grad3 = tf.gradients([self.front_loss], [self.gen_p])[0]
+                    grad3 = tf.gradients([self.front_loss], [self.gen_f])[0]
                     self.grad3 = tf.reduce_mean(tf.sqrt(tf.reduce_sum(tf.square(grad3), [1,2,3])))
                 # Summary
                 self._summary()    
@@ -78,20 +83,23 @@ class WGAN_GP(object):
     def build_arch(self):
         # Use pretrained model(vgg-face) as encoder of Generator
         self.feature_p = self.face_model.forward(self.profile,'profile_enc')
+        self.feature_f = self.face_model.forward(self.front, 'front_enc')
         print 'Face model output feature shape:', self.feature_p[3].get_shape()
         
         # Decoder front face from vgg feature
         self.gen_p = self.decoder(self.feature_p)
+        self.gen_f = self.decoder(self.feature_f, reuse=True)
         print 'Generator output shape:', self.gen_p.get_shape()
         
         # Map texture into features again by VGG    
         _,_,_, self.pool5_gen_p = self.face_model.forward(self.gen_p,'profile_gen_enc')
-        _,_,_, self.pool5_gt = self.face_model.forward(self.gt,'gt_enc')
+        _,_,_, self.pool5_gen_f = self.face_model.forward(self.gen_f, 'front_gen_enc')
         print 'Feature of Generated Image shape:', self.pool5_gen_p.get_shape()
         
         # Construct discriminator between generalized front face and ground truth
         self.dr = self.discriminator(self.front)
-        self.df = self.discriminator(self.gen_p, reuse=True)
+        self.df1 = self.discriminator(self.gen_p, reuse=True)
+        self.df2 = self.discriminator(self.gen_f, reuse=True)
         
         # Gradient Penalty #
         with tf.name_scope('gp'):
@@ -121,29 +129,41 @@ class WGAN_GP(object):
             norm = bn if(cfg.norm=='bn') else pixel_norm
             
             feat28,feat14,feat7,pool5 = feature[0],feature[1],feature[2],feature[3]
-                        
-            g_input = tf.reshape(fullyConnect(pool5, 4*4*512, 'fc0'), [-1, 4, 4, 512])
-            #ouput shape: [4, 4, 512]
-            with tf.variable_scope('dconv1'):
-                dconv1 = tf.nn.relu(norm(deconv2d(g_input, 256, 'dconv1', 
-                                        kernel_size=4, strides = 1, padding='valid'),self.is_train,'norm1'))
-            res1 = res_block(dconv1, 'res1', self.is_train, cfg.norm)
-            #ouput shape: [7, 7, 256]
+            
+            if 0:   
+                g_input = tf.reshape(fullyConnect(pool5, 4*4*512, 'fc0'), [-1, 4, 4, 512])
+                #ouput shape: [4, 4, 512]
+                with tf.variable_scope('dconv1'):
+                    dconv1 = tf.nn.relu(norm(deconv2d(g_input, 256, 'dconv1', 
+                                            kernel_size=4, strides = 1, padding='valid'),self.is_train,'norm1'))
+                res1 = res_block(dconv1, 'res1', self.is_train, cfg.norm)
+            
+            with tf.variable_scope('conv0'):
+                feat7 = tf.nn.relu(conv2d(feat7, 512, 'conv1', kernel_size=1, strides = 1))
+                #feat7_1 = tf.nn.relu(conv2d(feat7, 256, 'conv2', kernel_size=1, strides = 1))
+                #feat7_1_mirror = tf.reverse(feat7_1, axis=[2])
+                #conv0 = tf.concat((feat7_0, feat7_1_mirror), axis=3)
+            #ouput shape: [7, 7, 512]
+            res1_0 = res_block(feat7, 'res1_0',self.is_train, cfg.norm)
+            res1_1 = res_block(res1_0, 'res1_1',self.is_train, cfg.norm)
+            res1_2 = res_block(res1_1, 'res1_2',self.is_train, cfg.norm)
+            res1_3 = res_block(res1_2, 'res1_3',self.is_train, cfg.norm)
+            #ouput shape: [7, 7, 512]
             with tf.variable_scope('dconv2'):
-                feat7 = tf.nn.relu(norm(conv2d(feat7, 256, 'feat7', kernel_size=1),self.is_train,'norm2_1'))
-                dconv2 = tf.nn.relu(norm(deconv2d(tf.concat((res1,feat7),axis=3), 128, 'dconv2', 
+                #feat7 = tf.nn.relu(norm(conv2d(feat7, 256, 'feat7', kernel_size=1),self.is_train,'norm2_1'))
+                dconv2 = tf.nn.relu(norm(deconv2d(res1_3, 256, 'dconv2', 
                                         kernel_size=4, strides = 2),self.is_train,'norm2_2'))
             res2 = res_block(dconv2, 'res2',self.is_train, cfg.norm)
-            #ouput shape: [14, 14, 128]
+            #ouput shape: [14, 14, 256]
             with tf.variable_scope('dconv3'):
-                feat14 = tf.nn.relu(norm(conv2d(feat14, 128, 'feat14', kernel_size=1),self.is_train,'norm3_1'))
-                dconv3 = tf.nn.relu(norm(deconv2d(tf.concat((res2,feat14),axis=3), 64, 'dconv2', 
+                #feat14 = tf.nn.relu(norm(conv2d(feat14, 128, 'feat14', kernel_size=1),self.is_train,'norm3_1'))
+                dconv3 = tf.nn.relu(norm(deconv2d(res2, 128, 'dconv2', 
                                         kernel_size=4, strides = 2),self.is_train,'norm3_2'))
             res3 = res_block(dconv3, 'res3',self.is_train, cfg.norm)
-            #output shape: [28, 28, 64]
+            #output shape: [28, 28, 128]
             with tf.variable_scope('dconv4'):
-                feat28 = tf.nn.relu(norm(conv2d(feat28, 64, 'feat28', kernel_size=1),self.is_train,'norm4_1'))
-                dconv4 = tf.nn.relu(norm(deconv2d(tf.concat((res3,feat28),axis=3), 64, 'dconv4', 
+                #feat28 = tf.nn.relu(norm(conv2d(feat28, 64, 'feat28', kernel_size=1),self.is_train,'norm4_1'))
+                dconv4 = tf.nn.relu(norm(deconv2d(res3, 64, 'dconv4', 
                                         kernel_size=4, strides = 2),self.is_train,'norm4_2'))
             res4 = res_block(dconv4, 'res4',self.is_train, cfg.norm)
             #output shape: [56, 56, 64]
@@ -275,29 +295,32 @@ class WGAN_GP(object):
         with tf.name_scope('loss') as scope:
             with tf.name_scope('FeatureNorm'):
                 pool5_p_norm = self.feature_p[3] / (tf.norm(self.feature_p[3], axis=1,keep_dims=True) + epsilon)
+                pool5_f_norm = self.feature_f[3] / (tf.norm(self.feature_f[3], axis=1,keep_dims=True) + epsilon)
                 pool5_gen_p_norm = self.pool5_gen_p / (tf.norm(self.pool5_gen_p, axis=1,keep_dims=True) + epsilon)
-                pool5_gt_norm = self.pool5_gt / (tf.norm(self.pool5_gt, axis=1,keep_dims=True) + epsilon)
+                pool5_gen_f_norm = self.pool5_gen_f / (tf.norm(self.pool5_gen_f, axis=1,keep_dims=True) + epsilon)
                         
             # 1. Frontalization Loss: L1-Norm
-            #self.front_loss = tf.reduce_mean(tf.reduce_sum(tf.abs(self.gt/255. - self.texture/255.), [1,2,3]))
-            with tf.name_scope('Pixel_Loss'):
-                #face_mask = Image.open('tt.bmp').crop([13,13,237,237])
-                #face_mask = np.array(face_mask, dtype=np.float32).reshape(224,224,1) / 255.0
-                #face_mask = np.tile(face_mask, [cfg.batch_size, 1, 1, 3])
-                #self.front_loss = tf.losses.absolute_difference(labels=self.front, 
-                #                                                predictions=self.texture)
-                #self.front_loss = tf.reduce_sum(tf.abs(self.gt/255. - self.texture/255.))
-                self.weights = tf.reduce_sum(tf.multiply(pool5_p_norm, pool5_gt_norm), [1])
-                abs_sum = tf.reduce_sum(tf.square(self.gt/255. - self.gen_p/255.), [1,2,3])
-                self.front_loss = tf.reduce_mean(tf.multiply(self.weights, abs_sum))
-                tf.add_to_collection('losses', self.front_loss)
+            self.front_loss = tf.reduce_mean(tf.reduce_sum(tf.abs(self.front/255. - self.gen_f/255.), [1,2,3]))
+            if 0:
+              with tf.name_scope('Pixel_Loss'):
+                  #face_mask = Image.open('tt.bmp').crop([13,13,237,237])
+                  #face_mask = np.array(face_mask, dtype=np.float32).reshape(224,224,1) / 255.0
+                  #face_mask = np.tile(face_mask, [cfg.batch_size, 1, 1, 3])
+                  #self.front_loss = tf.losses.absolute_difference(labels=self.front, 
+                  #                                                predictions=self.texture)
+                  #self.front_loss = tf.reduce_sum(tf.abs(self.gt/255. - self.texture/255.))
+                  self.weights = tf.reduce_sum(tf.multiply(enc_fea_norm, enc_fea_gt_norm), [1])
+                  abs_sum = tf.reduce_sum(tf.abs(self.gt/255. - self.gen_p/255.), [1,2,3])
+                  self.front_loss = tf.reduce_mean(tf.multiply(self.weights, abs_sum))
+                  tf.add_to_collection('losses', self.front_loss)
           
             # 2. Feature Loss: Cosine-Norm / L2-Norm
             with tf.name_scope('Perceptual_Loss'):
-                self.feature_loss = tf.reduce_mean(1 - tf.reduce_sum(tf.multiply(pool5_p_norm, pool5_gen_p_norm),[1]))
-                #self.feature_loss = tf.losses.cosine_distance(labels=enc_fea_norm,
-                #                                              predictions=enc_fea_recon_norm, dim=1)
-                #self.feature_loss = tf.reduce_mean(tf.reduce_sum(tf.square(self.enc_fea_recon - self.enc_fea),[1]))
+                #feature_loss = (1-cfg.w_f)*(1 - tf.reduce_sum(tf.multiply(pool5_p_norm, pool5_gen_p_norm), [1])) + \
+                #               cfg.w_f*(1 - tf.reduce_sum(tf.multiply(pool5_f_norm, pool5_gen_f_norm), [1]))
+                feature_loss = (1-cfg.w_f)*tf.reduce_sum(tf.square(self.feature_p[3] - self.pool5_gen_p), [1]) + \
+                               cfg.w_f*tf.reduce_sum(tf.square(self.feature_f[3] - self.pool5_gen_f), [1])
+                self.feature_loss = tf.reduce_mean(feature_loss) #/ 2 
                 tf.add_to_collection('losses', self.feature_loss)
             
             # 3. L2 Regulation Loss
@@ -315,8 +338,11 @@ class WGAN_GP(object):
             
             # 4. Adversarial Loss
             with tf.name_scope('Adversarial_Loss'):
-                self.d_loss = tf.reduce_mean(tf.add_n(self.df) - tf.add_n(self.dr)) / 10
-                self.g_loss = - tf.reduce_mean(tf.add_n(self.df)) / 5
+                if 0: #MODE == 'lsgan':
+                    self.g_loss = tf.reduce_mean((self.df1 - 1)**2)
+                    self.d_loss = (tf.reduce_mean((self.dr - 1)**2) + tf.reduce_mean((self.df1 - 0)**2))/2.
+                self.d_loss = tf.reduce_mean(tf.add_n(self.df1)*(1-cfg.w_f) + tf.add_n(self.df2)*cfg.w_f - tf.add_n(self.dr)) / 5
+                self.g_loss = - tf.reduce_mean(tf.add_n(self.df1)*(1-cfg.w_f) + tf.add_n(self.df2)*cfg.w_f) / 5
                 tf.add_to_collection('losses', self.d_loss)
                 tf.add_to_collection('losses', self.g_loss)
             
@@ -344,7 +370,7 @@ class WGAN_GP(object):
         train_summary = []
         train_summary.append(tf.summary.scalar('train/d_loss', self.d_loss))
         train_summary.append(tf.summary.scalar('train/g_loss', self.g_loss))
-        train_summary.append(tf.summary.scalar('train/gp', self.gradient_penalty))
+        train_summary.append(tf.summary.scalar('train/gp', self.grad4))
         train_summary.append(tf.summary.scalar('train/feature_loss', self.feature_loss))
         train_summary.append(tf.summary.scalar('train/grad_feature', self.grad1))
         train_summary.append(tf.summary.scalar('train/grad_D', self.grad2))

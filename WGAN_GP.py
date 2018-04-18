@@ -13,15 +13,17 @@ class WGAN_GP(object):
     """
     setting1_8: 
     1. 使用pipeline读取训练图片
-    2. G_enc为VGG2, G_dec全卷积网络, PN(BN)和ReLU, 第一和最后一层不用PN, 上采样反卷积(k4s2), 输出接tanh并归一化到[0,255]
-    3. D: 对应人脸先验知识有五个部分的判别器, 输入先进行减均值归一化, LayerNorm和LReLU, 第一层和最后一层不用LN, 全卷积网络(k4s2)最后全连接到1
+    2. G_enc为VGG2输出conv5(7x7x2048), G_dec全卷积网络(1x1卷积到512维,4个残差,连续反卷积+残差,用BN(PN)和ReLU
+    3. D: 对应人脸先验知识有五个部分的判别器, 输入先进行减均值归一化, LayerNorm和LReLU, 全卷积网络(k4s2)最后全连接到1
     5. 判别器生成器用ADAM(0., 0.99), lr_G=lr_D, 
     6. 两个网络的L2规则化
     7. critic = 1
     8. Lg:侧脸P通过enc和dec生成正脸P', 两者构成VGG余弦距离和对抗损失; 正脸F通过enc和dec生成正脸F', 两者构成VGG余弦距离\像素的L1损失\对抗损失
     9. Ld:对抗损失 \ 梯度惩罚
-    10. 损失比 L1:fea:gan:gp = 0.01:250:1:10
-    11. 生成器网络结构变化
+    10. 损失比 L1:fea:gan:gp = 0.01:250:1:10, 其中P:F=0.9:0.1
+    12. casia侧脸和casia正脸预训练生成多样化正脸, 再缩小lr10倍casia侧脸和MPIE正脸生成归一化正脸
+    modified:
+    P:F=0.5:0.5, 
     """
     def __init__(self):
         self.graph = tf.Graph()
@@ -297,7 +299,7 @@ class WGAN_GP(object):
                 pool5_gen_f_norm = self.pool5_gen_f / (tf.norm(self.pool5_gen_f, axis=1,keep_dims=True) + epsilon)
                         
             # 1. Frontalization Loss: L1-Norm
-            self.front_loss = tf.reduce_mean(tf.reduce_sum(tf.abs(self.front/255. - self.gen_f/255.), [1,2,3]))
+            self.front_loss = tf.reduce_mean(tf.reduce_sum(tf.abs(self.front/255. - self.gen_f/255.), [1,2,3])) #cfg.w_f*
             if 0:
               with tf.name_scope('Pixel_Loss'):
                   #face_mask = Image.open('tt.bmp').crop([13,13,237,237])
@@ -313,8 +315,8 @@ class WGAN_GP(object):
           
             # 2. Feature Loss: Cosine-Norm / L2-Norm
             with tf.name_scope('Perceptual_Loss'):
-                feature_loss = 0.9*(1 - tf.reduce_sum(tf.multiply(pool5_p_norm, pool5_gen_p_norm), [1])) + \
-                               0.1*(1 - tf.reduce_sum(tf.multiply(pool5_f_norm, pool5_gen_f_norm), [1]))
+                feature_loss = (1-cfg.w_f)*(1 - tf.reduce_sum(tf.multiply(pool5_p_norm, pool5_gen_p_norm), [1])) + \
+                               cfg.w_f*(1 - tf.reduce_sum(tf.multiply(pool5_f_norm, pool5_gen_f_norm), [1]))
                 self.feature_loss = tf.reduce_mean(feature_loss) #/ 2 
                 tf.add_to_collection('losses', self.feature_loss)
             
@@ -336,8 +338,8 @@ class WGAN_GP(object):
                 if 0: #MODE == 'lsgan':
                     self.g_loss = tf.reduce_mean((self.df1 - 1)**2)
                     self.d_loss = (tf.reduce_mean((self.dr - 1)**2) + tf.reduce_mean((self.df1 - 0)**2))/2.
-                self.d_loss = tf.reduce_mean(tf.add_n(self.df1)*0.9 + tf.add_n(self.df2)*0.1 - tf.add_n(self.dr)) / 5
-                self.g_loss = - tf.reduce_mean(tf.add_n(self.df1)*0.9 + tf.add_n(self.df2)*0.1) / 5
+                self.d_loss = tf.reduce_mean(tf.add_n(self.df1)*(1-cfg.w_f) + tf.add_n(self.df2)*cfg.w_f - tf.add_n(self.dr)) / 5
+                self.g_loss = - tf.reduce_mean(tf.add_n(self.df1)*(1-cfg.w_f) + tf.add_n(self.df2)*cfg.w_f) / 5
                 tf.add_to_collection('losses', self.d_loss)
                 tf.add_to_collection('losses', self.g_loss)
             

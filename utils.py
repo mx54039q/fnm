@@ -158,9 +158,9 @@ class loadData(object):
             os.mkdir(save_path)
         for i in range(imgs.shape[0]):
             try:
-                img_name = self.test_list[i + self.test_index - img_num].split('/')[1]
+                img_name = self.test_list[i + self.test_index - img_num].split('/')[-1]
             except:
-                img_name = self.test_list[test_size + i + self.test_index - img_num].split('/')[1]
+                img_name = self.test_list[test_size + i + self.test_index - img_num].split('/')[-1]
             Image.fromarray(imgs[i]).save(os.path.join(save_path, img_name))
             
     def save_train(self, imgs):
