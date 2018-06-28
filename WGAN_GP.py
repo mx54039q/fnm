@@ -20,10 +20,8 @@ class WGAN_GP(object):
     7. critic = 1
     8. Lg:侧脸P通过enc和dec生成正脸P', 两者构成VGG余弦距离和对抗损失; 正脸F通过enc和dec生成正脸F', 两者构成VGG余弦距离\像素的L1损失\对抗损失
     9. Ld:对抗损失 \ 梯度惩罚
-    10. 损失比 L1:fea:gan:gp = 0.01:250:1:10, 其中P:F=0.9:0.1
+    10. 损失比 L1:fea:gan:gp = 0.001:500:1:10, 其中P:F=0.5:0.5
     12. casia侧脸和casia正脸预训练生成多样化正脸, 再缩小lr10倍casia侧脸和MPIE正脸生成归一化正脸
-    modified:
-    P:F=0.5:0.5, 
     """
     def __init__(self):
         self.graph = tf.Graph()
@@ -102,7 +100,7 @@ class WGAN_GP(object):
         
         # Gradient Penalty #
         with tf.name_scope('gp'):
-            alpha = tf.random_uniform((tf.shape(self.gen_p)[0], 1, 1, 1),minval = 0., maxval = 1.,)
+            alpha = tf.random_uniform((self.gen_p.get_shape().as_list()[0], 1, 1, 1),minval = 0., maxval = 1.,)
             inter = self.front + alpha * (self.gen_p - self.front)
             d = self.discriminator(inter, reuse=True)
             grad = tf.gradients([d], [inter])[0]
@@ -192,10 +190,11 @@ class WGAN_GP(object):
             norm = slim.layer_norm
             
             images = images / 127.5 - 1
-            eyes = tf.slice(images, [0,64,50,0], [self.batch_size,36,124,3]) #[64:100,50:174,:]
-            nose = tf.slice(images, [0,75,90,0], [self.batch_size,65,44,3]) #[75:140,90:134,:]
-            mouth = tf.slice(images, [0,140,75,0], [self.batch_size,30,74,3]) #[140:170,75:149,:]
-            face = tf.slice(images, [0,64,50,0], [self.batch_size,116,124,3]) #[64:180,50:174,:]
+            bs = images.get_shape().as_list()[0]
+            eyes = tf.slice(images, [0,64,50,0], [bs,36,124,3]) #[64:100,50:174,:]
+            nose = tf.slice(images, [0,75,90,0], [bs,65,44,3]) #[75:140,90:134,:]
+            mouth = tf.slice(images, [0,140,75,0], [bs,30,74,3]) #[140:170,75:149,:]
+            face = tf.slice(images, [0,64,50,0], [bs,116,124,3]) #[64:180,50:174,:]
             with tf.variable_scope("images"):
                 with tf.variable_scope('d_conv0'):
                     h0_0 = lrelu(conv2d(images, 32, 'd_conv0', kernel_size=4, strides=2))
@@ -213,7 +212,7 @@ class WGAN_GP(object):
                     h0_4 = lrelu(norm(conv2d(h0_3, 256, 'd_conv4', kernel_size=4, strides=2)))
                 # h4 is (7 x 7 x 256)
                 with tf.variable_scope('d_fc'):
-                    h0_4 = tf.reshape(h0_4, [self.batch_size, -1])
+                    h0_4 = tf.reshape(h0_4, [bs, -1])
                     h0_5 = fullyConnect(h0_4, 1, 'd_fc')
                 # h5 is (1)
             with tf.variable_scope("eyes"):
@@ -230,7 +229,7 @@ class WGAN_GP(object):
                     h1_3 = lrelu(norm(conv2d(h1_2, 256, 'd_conv3', kernel_size=4, strides=2)))
                 # h3 is (3 x 8 x 256)
                 with tf.variable_scope('d_fc'):
-                    h1_3 = tf.reshape(h1_3, [self.batch_size, -1])
+                    h1_3 = tf.reshape(h1_3, [bs, -1])
                     h1_4 = fullyConnect(h1_3, 1, 'd_fc')
                 # h4 is (1)
             with tf.variable_scope("nose"):
@@ -247,7 +246,7 @@ class WGAN_GP(object):
                     h2_3 = lrelu(norm(conv2d(h2_2, 256, 'd_conv3', kernel_size=4, strides=2)))
                 # h3 is (5 x 3 x 256)
                 with tf.variable_scope('d_fc'):
-                    h2_3 = tf.reshape(h2_3, [self.batch_size, -1])
+                    h2_3 = tf.reshape(h2_3, [bs, -1])
                     h2_4 = fullyConnect(h2_3, 1, 'd_fc')
                 # h4 is (1)
             with tf.variable_scope("mouth"):
@@ -264,7 +263,7 @@ class WGAN_GP(object):
                     h3_3 = lrelu(norm(conv2d(h3_2, 256, 'd_conv3', kernel_size=4, strides=2)))
                 # h3 is (2 x 5 x 256)
                 with tf.variable_scope('d_fc'):
-                    h3_3 = tf.reshape(h3_3, [self.batch_size, -1])
+                    h3_3 = tf.reshape(h3_3, [bs, -1])
                     h3_4 = fullyConnect(h3_3, 1, 'd_fc')
                 # h4 is (1)
             with tf.variable_scope("face"):
@@ -281,7 +280,7 @@ class WGAN_GP(object):
                     h4_3 = lrelu(norm(conv2d(h4_2, 256, 'd_conv3', kernel_size=4, strides=2)))
                 # h3 is (8 x 8 x 256)
                 with tf.variable_scope('d_fc'):
-                    h4_3 = tf.reshape(h4_3, [self.batch_size, -1])
+                    h4_3 = tf.reshape(h4_3, [bs, -1])
                     h4_4 = fullyConnect(h4_3, 1, 'd_fc')
                 # h4 is (1)
             
@@ -299,7 +298,7 @@ class WGAN_GP(object):
                 pool5_gen_f_norm = self.pool5_gen_f / (tf.norm(self.pool5_gen_f, axis=1,keep_dims=True) + epsilon)
                         
             # 1. Frontalization Loss: L1-Norm
-            self.front_loss = tf.reduce_mean(tf.reduce_sum(tf.abs(self.front/255. - self.gen_f/255.), [1,2,3])) #cfg.w_f*
+            self.front_loss = tf.reduce_mean(tf.reduce_sum(tf.abs(self.front/255. - self.gen_f/255.), [1,2,3]))
             if 0:
               with tf.name_scope('Pixel_Loss'):
                   #face_mask = Image.open('tt.bmp').crop([13,13,237,237])

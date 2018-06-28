@@ -412,7 +412,7 @@ class Resnet50(object):
             # output shape: [2048]
             assert pool5_7x7_s1.get_shape().as_list()[1:] == [2048]
         
-        return conv3_4, conv4_6, conv5_3, pool5_7x7_s1 # 28,14,7,1
+        return conv3_4, conv4_6, conv5_3, pool5_7x7_s1 # 56,28,14,7,1
 
 
     def avg_pool(self, bottom, name):

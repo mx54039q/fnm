@@ -2,27 +2,27 @@
 import os
 import tensorflow as tf
 from config import cfg
-from WGAN_GP import WGAN_GP
-#from WGAN_GP2 import WGAN_GP
+from WGAN_GP2 import WGAN_GP
 
 # Training Setting
-test_num = 800 / cfg.batch_size
+test_num = 1600 / cfg.batch_size
     
 def main(_):
     # Choose GPU 
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     
     net = WGAN_GP() #
     if not os.path.exists(cfg.results):
         os.mkdir(cfg.results)
         
     config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
+    #config.gpu_options.allow_growth = True
+    config.gpu_options.per_process_gpu_memory_fraction = 0.7
     with tf.Session(config=config, graph=net.graph) as sess:
         sess.run(tf.global_variables_initializer())
         threads = tf.train.start_queue_runners(sess=sess)
-        saver = tf.train.Saver(max_to_keep=0) #
+        saver = tf.train.Saver() #max_to_keep=0
         if cfg.is_finetune:
             saver.restore(sess, cfg.model_path)
             print('Load Model Successfully!')
@@ -47,7 +47,7 @@ def main(_):
                                                        {net.is_train:True})
                 writer.add_summary(summary, epoch*num_batch + step)
                 print('%d-%d, Fea Loss:%.2f, D Loss:%4.1f, G Loss:%4.1f, g1/2/4:%.3f/%.3f/%.3f' % 
-                    (epoch, step, fl, dl, gl, g1,g2,g4))
+                    (epoch, step, fl, dl, gl, g1*500,g2,g4))
                 
                 if step % cfg.test_sum_freq == 0:
                     net.data_feed.save_train(gen)
@@ -63,7 +63,7 @@ def main(_):
                          (fl/test_num, dl/test_num, gl/test_num))
                 if(step != 0 and step % cfg.save_freq == 0):
                     print("Saving Model....")
-                    saver.save(sess, cfg.logdir + '-%1d-%d' % (epoch,step)) #
+                    saver.save(sess, cfg.logdir + '-%1d' % (epoch)) #
             
         #fd_results.close()
         
