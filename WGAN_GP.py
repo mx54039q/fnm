@@ -372,10 +372,6 @@ class WGAN_GP(object):
         train_summary.append(tf.summary.scalar('train/grad_D', self.grad2))
         self.train_summary = tf.summary.merge(train_summary)
         
-        #correct_prediction = tf.equal(tf.to_int32(self.labels), self.argmax_idx)
-        #self.batch_accuracy = tf.reduce_sum(tf.cast(correct_prediction, tf.float32))
-        #self.test_acc = tf.placeholder_with_default(tf.constant(0.), shape=[])
-        
 if '__name__' == '__main__':
     net = WGAN_GP()
     net.build()
