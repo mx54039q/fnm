@@ -33,8 +33,8 @@ class loadData(object):
         self.test_list = np.loadtxt(cfg.test_list, dtype='string',delimiter=',') #
         self.test_index = 0
         
-        self.crop_box = [(cfg.ori_height - cfg.height) / 2,(cfg.ori_width - cfg.width) / 2, 
-                        (cfg.ori_height + cfg.height) / 2, (cfg.ori_width + cfg.width) / 2]            
+        self.crop_box = [(cfg.ori_height + cfg.height) / 2, (cfg.ori_width + cfg.width) / 2,
+                        (cfg.ori_height - cfg.height) / 2,(cfg.ori_width - cfg.width) / 2,]            
         assert Image.open(os.path.join(cfg.profile_path, self.profile[0])).size == \
                (cfg.ori_width, cfg.ori_height)
     
@@ -60,7 +60,7 @@ class loadData(object):
             
             # Flip and crop image
             lf_profile_value = tf.image.random_flip_left_right(profile_value)
-            crop_profile_value = tf.random_crop(lf_profile_value, [cfg.height, cfg.width, 3])
+            crop_profile_value = tf.random_crop(lf_profile_value, [cfg.height, cfg.width, cfg.channel])
             crop_front_value = tf.image.crop_to_bounding_box(front_value, 
                                                             (cfg.ori_height-cfg.height)/2, 
                                                             (cfg.ori_width-cfg.width)/2, 
