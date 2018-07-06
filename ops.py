@@ -6,6 +6,15 @@ from config import cfg
 import tensorflow.contrib.slim as slim
 
 def ins_norm(input, reuse=True, name="in"):
+    """Instance Normalization
+    
+    args:
+        input: input tensor;
+        reuse (tf.bool): whether to reuse parameter
+        name (string): name of this op
+    return:
+        instance normalized result 
+    """
     with tf.variable_scope(name, reuse=reuse):
         eps = 1e-5
         mean, sigma = tf.nn.moments(input, [1, 2], keep_dims=True)
@@ -13,8 +22,9 @@ def ins_norm(input, reuse=True, name="in"):
     return normalized
     
 def pixel_norm(x, train=True, name="pn"):
-    '''
-    pixel channel-wise normalization from "PROGRESSIVE GROWING OF GANS FOR
+    '''Pixel channel-wise normalization
+    
+    Pixe channel-wise normalization from "PROGRESSIVE GROWING OF GANS FOR
     IMPROVED QUALITY, STABILITY, AND VARIATION"
     '''
     with tf.variable_scope(name):
@@ -22,6 +32,14 @@ def pixel_norm(x, train=True, name="pn"):
         return x * tf.rsqrt(tf.reduce_mean(tf.square(x), axis=norm_axis, keep_dims=True) + 1e-8)
 
 def bn(x, train=True, name="bn", epsilon=1e-5, momentum = 0.9):
+    """Batch Normalization implemented by tensorflow
+    
+    args:
+        x: input tensor
+        train (bool): BN mode, "train" or "test"
+    return:
+        Batch Normalization result
+    """
     return tf.contrib.layers.batch_norm(x,
                     decay=momentum, 
                     updates_collections=None,

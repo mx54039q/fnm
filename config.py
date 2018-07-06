@@ -26,6 +26,7 @@ flags.DEFINE_string('test_path', '/home/ycqian/session01_align', 'test set path'
 flags.DEFINE_string('test_list', 'mpie/session01_test.txt', 'test set path') # lfw/lfw_test.txt
 flags.DEFINE_boolean('is_train', True, 'train or frontalize test')
 flags.DEFINE_boolean('is_finetune', False, 'finetune') # False, True
+flags.DEFINE_string('face_model', 'resnet50.npy', 'face model path') #
 flags.DEFINE_string('logdir', 'logdir/raf/raf1', 'model directory') #
 flags.DEFINE_string('summary_dir', 'log/raf1', 'logs directory') #
 flags.DEFINE_string('model_path', 'logdir/raf/raf1', 'finetune model path') #
@@ -52,6 +53,7 @@ flags.DEFINE_integer('ori_height', 250, 'original height of images') #
 flags.DEFINE_integer('ori_width', 250, 'original width of images') #
 flags.DEFINE_integer('height', 224, 'height of images')
 flags.DEFINE_integer('width', 224, 'width of images')
+flags.DEFINE_integer('channel', 3, 'channel of images')
 flags.DEFINE_integer('num_threads', 8, 'number of threads of enqueueing examples')
 flags.DEFINE_string('results', 'results', 'path for saving results')
 

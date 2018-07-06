@@ -74,8 +74,8 @@ class loadData(object):
             return tf.cast(profile, tf.float32, 'profile'), tf.cast(front, tf.float32, 'front')
         
     def get_train_batch(self):
-        """
-        get train images by batch
+        """Get train images by batch
+        
         return:
             trX: training profile images
             trY: training front images
@@ -94,10 +94,10 @@ class loadData(object):
         return (trX, trY)
         
     def get_test_batch(self, batch_size = cfg.batch_size):
-        """
-        get test images by batch
+        """Get test images by batch
+        
         args:
-            batch size
+            batch_size: size of test scratch
         return:
             teX: testing profile images
             teY: testing front images
@@ -117,15 +117,18 @@ class loadData(object):
         return(teX, teY)
 
     def read_image(self, img, flip=False):
-        """
-        read single image, crop to target size and random flip horizontally
+        """Read image
+        
+        Read a image from image path, and crop to target size
+        and random flip horizontally
+        
         args:
             img: image path
         return:
             img: data matrix from image
         """
         img = Image.open(img)
-        if(img.mode=='L'):
+        if(img.mode=='L' and cfg.channel == 3):
             img = img.convert('RGB')
         if flip and np.random.random() > 0.5:
             img = img.transpose(Image.FLIP_LEFT_RIGHT)
@@ -134,10 +137,11 @@ class loadData(object):
         return np.array(img, dtype=np.float32)
         
     def save_images(self, imgs, epoch=0):
-        """
+        """Save images
+     
         args:
-            imgs: [batch_size, img_height, img_width, img_chanel], image pixels need
-            to be normalized between [-1, 1]
+            imgs: images in shape of [BatchSize, Weight, Height, Channel], must be normalized to [0,255]
+            epoch: epoch number
         """
         imgs = imgs.astype('uint8')  # inverse_transform
         img_num = imgs.shape[0]
@@ -153,8 +157,10 @@ class loadData(object):
             Image.fromarray(imgs[i]).save(os.path.join(save_path, img_name))
             
     def save_train(self, imgs):
-        """
-        save images in training process
+        """Save images in training process
+        
+        args:
+            imgs: images in shape of [BatchSize, Weight, Height, Channel], must be normalized to [0,255]
         """
         imgs = imgs.astype('uint8')  # inverse_transform
         img_num = imgs.shape[0]

@@ -9,13 +9,17 @@ VGG_MEAN = [131.0912, 103.8827, 91.4953] # for channel BGR
 #VGG_MEAN = [129.1836, 104.7624, 93.5940] # for channel BGR
 
 class Resnet50(object):
+    """Class for Resnet50 model trained on VGGFace2 dataset
+    
+    This class is for resnet50 model trained on VGGFace2 dataset. Restore 
+    pretrained model from binary file. Function "forward" can extract feature 
+    from a input face.
+    """
     def __init__(self, resnet50_npy_path=None):
-        """
-        Load VGG model from binary file.
-        """
         if resnet50_npy_path is None:
             path = inspect.getfile(Resnet50)
             path = os.path.abspath(os.path.join(path, os.pardir))
+            # resnet50.npy is name of pretrained model
             path = os.path.join(path, "resnet50.npy")
             resnet50_npy_path = path
 
@@ -23,8 +27,7 @@ class Resnet50(object):
         print("npy file loaded")
     
     def build(self):
-        """
-        load parameters from dict to build the resnet50
+        """Load parameters from dict and build up the face recognition model
         """
         with tf.variable_scope('resnet50_parameters'):
             # BatchNorm Init
@@ -226,13 +229,12 @@ class Resnet50(object):
         self.data_dict = None
         
     def forward(self, rgb, scope = 'resnet50'):
-        """
-        forword pass 
+        """Forward pipeline of face recognition model
+        
         args:
-            rgb: rgb image tensors with shape(batch, height, width, 3), values range[0,255]
+            rgb: rgb image tensors with shape(batch, height, width, 3), values range in [0,255]
         return:
-            conv5_3: output of second last layer before pooling. [7, 7, 2048]
-            pool5_7x7_s1: output of pool5 layer. [2048]
+            a set of tensors of layers
         """
         with tf.name_scope(scope):
             # Convert RGB to BGR as VGG model do
@@ -412,8 +414,7 @@ class Resnet50(object):
             # output shape: [2048]
             assert pool5_7x7_s1.get_shape().as_list()[1:] == [2048]
         
-        return conv3_4, conv4_6, conv5_3, pool5_7x7_s1 # 56,28,14,7,1
-
+        return conv3_4, conv4_6, conv5_3, pool5_7x7_s1 # shape of 28,14,7,1
 
     def avg_pool(self, bottom, name):
         return tf.nn.avg_pool(bottom, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME', name=name)
