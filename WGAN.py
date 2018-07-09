@@ -84,7 +84,7 @@ class WGAN(object):
         # Map texture into features again by VGG    
         self.feature_gen_p = self.face_model.forward(self.gen_p,'profile_gen_enc')
         self.feature_gen_f = self.face_model.forward(self.gen_f, 'front_gen_enc')
-        print 'Feature of Generated Image shape:', self.feature_gen_p.get_shape()
+        print 'Feature of Generated Image shape:', self.feature_gen_p[-1].get_shape()
         
         # Construct discriminator between generalized front face and ground truth
         self.dr = self.discriminator(self.front)
