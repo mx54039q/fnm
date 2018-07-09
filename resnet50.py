@@ -1,4 +1,3 @@
-import inspect
 import os
 
 import numpy as np
@@ -16,14 +15,7 @@ class Resnet50(object):
     from a input face.
     """
     def __init__(self, resnet50_npy_path=None):
-        if resnet50_npy_path is None:
-            path = inspect.getfile(Resnet50)
-            path = os.path.abspath(os.path.join(path, os.pardir))
-            # resnet50.npy is name of pretrained model
-            path = os.path.join(path, "resnet50.npy")
-            resnet50_npy_path = path
-
-        self.data_dict = np.load(resnet50_npy_path, encoding='latin1').item()
+        self.data_dict = np.load(cfg.face_model, encoding='latin1').item()
         print("npy file loaded")
     
     def build(self):
@@ -229,7 +221,7 @@ class Resnet50(object):
         self.data_dict = None
         
     def forward(self, rgb, scope = 'resnet50'):
-        """Forward pipeline of face recognition model
+        """Forward process of face recognition model
         
         args:
             rgb: rgb image tensors with shape(batch, height, width, 3), values range in [0,255]

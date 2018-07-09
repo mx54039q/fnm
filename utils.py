@@ -33,19 +33,20 @@ class loadData(object):
         self.test_list = np.loadtxt(cfg.test_list, dtype='string',delimiter=',') #
         self.test_index = 0
         
-        self.crop_box = [(cfg.ori_height + cfg.height) / 2, (cfg.ori_width + cfg.width) / 2,
-                        (cfg.ori_height - cfg.height) / 2,(cfg.ori_width - cfg.width) / 2,]            
+        # Crop Box: left, upper, right, lower
+        self.crop_box = [(cfg.ori_width - cfg.width) / 2, (cfg.ori_height - cfg.height) / 2,
+                        (cfg.ori_width + cfg.width) / 2, (cfg.ori_height + cfg.height) / 2]         
         assert Image.open(os.path.join(cfg.profile_path, self.profile[0])).size == \
                (cfg.ori_width, cfg.ori_height)
     
     def get_train(self):
-        """Get train images
+        """Get train images by Feeding
         
         Train images will be horizontal-flipped and center-cropped randomly.
         
         return:
-            profile (): profile of identity A
-            front (): front face of identity B
+            profile (tf.tensor): profile of identity A
+            front (tf.tensor): front face of identity B
         """
         with tf.name_scope('data_feed'):
             profile_list = [cfg.profile_path+'/'+img for img in self.profile]
@@ -61,6 +62,7 @@ class loadData(object):
             # Flip and crop image
             lf_profile_value = tf.image.random_flip_left_right(profile_value)
             crop_profile_value = tf.random_crop(lf_profile_value, [cfg.height, cfg.width, cfg.channel])
+            # Args: [image, offset_height, offset_width, target_height, target_width]
             crop_front_value = tf.image.crop_to_bounding_box(front_value, 
                                                             (cfg.ori_height-cfg.height)/2, 
                                                             (cfg.ori_width-cfg.width)/2, 
@@ -74,24 +76,24 @@ class loadData(object):
             return tf.cast(profile, tf.float32, 'profile'), tf.cast(front, tf.float32, 'front')
         
     def get_train_batch(self):
-        """Get train images by batch
+        """Get train images by preload
         
         return:
             trX: training profile images
             trY: training front images
         """
-        trX = np.zeros((self.batch_size, cfg.height, cfg.width, 3), dtype=np.float32)
-        trY = np.zeros((self.batch_size, cfg.height, cfg.width, 3), dtype=np.float32)
+        trX = np.zeros((self.batch_size, cfg.height, cfg.width, cfg.channel), dtype=np.float32)
+        trY = np.zeros((self.batch_size, cfg.height, cfg.width, cfg.channel), dtype=np.float32)
         for i in range(self.batch_size):
             try:
-                trX[i] = self.read_image(self.train_list[i + self.train_index][0], flip=True)
-                trY[i] = self.read_image(self.train_list[i + self.train_index][1], flip=True)
+                trX[i] = self.read_image(cfg.profile_path+'/'+self.profile[i + self.train_index], flip=True)
+                trY[i] = self.read_image(cfg.front_path+'/'+self.front[i + self.train_index], flip=True)
             except:
                 self.train_index = -i
-                trX[i] = self.read_image(self.train_list[i +self.train_index][0], flip=True)
-                trY[i] = self.read_image(self.train_list[i +self.train_index][1], flip=True)
+                trX[i] = self.read_image(cfg.profile_path+'/'+self.profile[i +self.train_index], flip=True)
+                trY[i] = self.read_image(cfg.front_path+'/'+self.front[i +self.train_index], flip=True)
         self.train_index += self.batch_size
-        return (trX, trY)
+        return trX, trY
         
     def get_test_batch(self, batch_size = cfg.batch_size):
         """Get test images by batch
@@ -100,10 +102,10 @@ class loadData(object):
             batch_size: size of test scratch
         return:
             teX: testing profile images
-            teY: testing front images
+            teY: testing front images, same as profile images
         """
-        teX = np.zeros((batch_size, cfg.height, cfg.width, 3), dtype=np.float32)
-        teY = np.zeros((batch_size, cfg.height, cfg.width, 3), dtype=np.float32)
+        teX = np.zeros((batch_size, cfg.height, cfg.width, cfg.channel), dtype=np.float32)
+        teY = np.zeros((batch_size, cfg.height, cfg.width, cfg.channel), dtype=np.float32)
         for i in range(batch_size):
             try:
                 teX[i] = self.read_image(cfg.test_path+'/'+self.test_list[i +self.test_index])
@@ -114,7 +116,7 @@ class loadData(object):
                 teX[i] = self.read_image(cfg.test_path+'/'+self.test_list[i +self.test_index])
                 teY[i] = self.read_image(cfg.test_path+'/'+self.test_list[i +self.test_index])
         self.test_index += batch_size
-        return(teX, teY)
+        return teX, teY
 
     def read_image(self, img, flip=False):
         """Read image
@@ -134,7 +136,10 @@ class loadData(object):
             img = img.transpose(Image.FLIP_LEFT_RIGHT)
         if cfg.crop:
             img = img.crop(self.crop_box)
-        return np.array(img, dtype=np.float32)
+        img = np.array(img, dtype=np.float32)
+        if(cfg.channel == 1):
+            img = np.expand_dims(img, axis=2)
+        return img
         
     def save_images(self, imgs, epoch=0):
         """Save images
@@ -144,6 +149,8 @@ class loadData(object):
             epoch: epoch number
         """
         imgs = imgs.astype('uint8')  # inverse_transform
+        if(cfg.channel == 1):
+            imgs = imgs[:,:,:,0]
         img_num = imgs.shape[0]
         test_size = self.test_list.shape[0]
         save_path = cfg.results + '/epoch'+str(epoch)

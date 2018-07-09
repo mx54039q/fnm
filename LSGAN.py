@@ -9,11 +9,17 @@ from ops import *
 epsilon = 1e-9
 
 class LSGAN(object):
-    """
+    """Class for Feature-embedded and Attention GAN with Least Square GAN 
+    
+    This class is for face normalization task, including the following three contributions.
+    
+    1. Feature-embedded: Embedding pretrained face recognition model in G.
+    2. Attention Mechanism: Attention Discriminator for elaborate image.
+    3. Pixel Loss: front-to-front transform introduce pixel-wise loss.
+    
     version: 
-    1. 使用pipeline读取训练图片
-    2. G_enc为VGG2, G_dec为全卷积网络, Pixel-Wise Normalization和ReLU, 最后一层不用PN, 上采样反卷积(k4s2),
-       三个尺度输出(56/112/224), 2个尺度输出后再join初始特征并接一个残差模块, 输出接tanh并归一化到[0,255]
+    1. Feed模式读取训练图片
+    2. G_enc为VGG2输出conv5(7x7x2048), G_dec全卷积网络(1x1卷积到512维,4个残差,连续反卷积+残差,用PN和ReLU
     3. 对应G有三个尺度的独立的判别器, 输入先进行减均值归一化, BN和LReLU, 第一层和最后一层不用BN, 全卷积网络(k4s2)
     4. G损失函数:VGG特征余弦距离/MSE距离/人脸水平对称; D损失函数:MSE距离
     5. 2个优化器Adam(beta1=0.5, beta2=0.9), lr_G=lr_D, 
@@ -34,7 +40,7 @@ class LSGAN(object):
             # Construct G_dec and D in 3 scale
             if cfg.is_train:                
                 self.is_train = tf.placeholder(tf.bool, name='is_train')
-                self.profile,self.gt,self.front,self.resized_56,self.resized_112 = self.data_feed.get_train()
+                self.profile, self.front = self.data_feed.get_train()
                 
                 # Construct Model
                 self.build_arch()
@@ -62,34 +68,38 @@ class LSGAN(object):
                 with tf.name_scope('clip_weightOf_D'):
                     self.clip_D = [p.assign(tf.clip_by_value(p, -0.01, 0.01)) for p in self.vars_dis]
             else:
-                self.profile = tf.placeholder("float", [None, 224, 224, 3], 'profile')
+                self.profile = tf.placeholder("float", [None, cfg.height, cfg.width, cfg.channel], 'profile')
                 self.is_train = tf.placeholder(tf.bool, name='is_train')
-                self.front = tf.placeholder("float", [None, 224, 224, 3], 'front')
+                self.front = tf.placeholder("float", [None, cfg.height, cfg.width, cfg.channel], 'front')
                 
                 self.build_arch()
                 
         tf.logging.info('Seting up the main structure')
 
     def build_arch(self):
-        # Use pretrained model(vgg-face) as encoder of Generator
-        with tf.name_scope('face_encoder') as scope:
-            _, self.enc_fea = self.face_model.forward(self.profile)
-        print 'Face model output feature shape:', self.enc_fea.get_shape()
+        """Build up architecture
         
-        # Decoder front faces of 3 scale from vgg feature
-        self.texture_56, self.texture_112, self.texture_224 = self.decoder(self.enc_fea)
-        assert self.texture_224.get_shape().as_list()[1:] == [224,224,3]
+        1. Pretrained face recognition model forward
+        """
+        # Use pretrained model(vgg-face) as encoder of Generator
+        self.feature_p = self.face_model.forward(self.profile,'profile_enc')
+        self.feature_f = self.face_model.forward(self.front, 'front_enc')
+        print 'Face model output feature shape:', self.feature_p[-1].get_shape()
+        
+        # Decoder front face from vgg feature
+        self.gen_p = self.decoder(self.feature_p)
+        self.gen_f = self.decoder(self.feature_f, reuse=True)
+        print 'Generator output shape:', self.gen_p.get_shape()
         
         # Map texture into features again by VGG    
-        with tf.name_scope('encoder_recon'):
-            _, self.enc_fea_recon = self.face_model.forward(self.texture_224)
-        assert self.enc_fea_recon.get_shape().as_list()[1:] == [2048]
+        self.feature_gen_p = self.face_model.forward(self.gen_p,'profile_gen_enc')
+        self.feature_gen_f = self.face_model.forward(self.gen_f, 'front_gen_enc')
+        print 'Feature of Generated Image shape:', self.feature_gen_p[-1].get_shape()
         
         # Construct discriminator between generalized front face and ground truth
-        self.dr_56, self.dr_56_logits,self.dr_112, self.dr_112_logits,self.dr_224, self.dr_224_logits = \
-            self.discriminator(self.resized_56,self.resized_112,self.front) #
-        self.df_56, self.df_56_logits,self.df_112, self.df_112_logits,self.df_224, self.df_224_logits = \
-            self.discriminator(self.texture_56,self.texture_112,self.texture_224, reuse=True)
+        self.dr = self.discriminator(self.front)
+        self.df1 = self.discriminator(self.gen_p, reuse=True)
+        self.df2 = self.discriminator(self.gen_f, reuse=True)
         
     def decoder(self, feature, reuse=False):
         """

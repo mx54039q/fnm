@@ -10,9 +10,16 @@ import tensorflow.contrib.slim as slim
 epsilon = 1e-9
 
 class WGAN_GP(object):
-    """
+    """Class for Feature-embedded and Attention GAN
+    
+    This class is for face normalization task, including the following three contributions.
+    
+    1. Feature-embedded: Embedding pretrained face recognition model in G.
+    2. Attention Mechanism: Attention Discriminator for elaborate image.
+    3. Pixel Loss: front-to-front transform introduce pixel-wise loss.
+    
     setting1_8: 
-    1. 使用pipeline读取训练图片
+    1. Feed模式读取训练图片
     2. G_enc为VGG2输出conv5(7x7x2048), G_dec全卷积网络(1x1卷积到512维,4个残差,连续反卷积+残差,用BN(PN)和ReLU
     3. D: 对应人脸先验知识有五个部分的判别器, 输入先进行减均值归一化, LayerNorm和LReLU, 全卷积网络(k4s2)最后全连接到1
     5. 判别器生成器用ADAM(0., 0.99), lr_G=lr_D, 
@@ -21,7 +28,6 @@ class WGAN_GP(object):
     8. Lg:侧脸P通过enc和dec生成正脸P', 两者构成VGG余弦距离和对抗损失; 正脸F通过enc和dec生成正脸F', 两者构成VGG余弦距离\像素的L1损失\对抗损失
     9. Ld:对抗损失 \ 梯度惩罚
     10. 损失比 L1:fea:gan:gp = 0.001:500:1:10, 其中P:F=0.5:0.5
-    12. casia侧脸和casia正脸预训练生成多样化正脸, 再缩小lr10倍casia侧脸和MPIE正脸生成归一化正脸
     """
     def __init__(self):
         self.graph = tf.Graph()
@@ -38,7 +44,7 @@ class WGAN_GP(object):
             # Construct G_dec and D
             if cfg.is_train:                
                 self.is_train = tf.placeholder(tf.bool, name='is_train')
-                self.profile, self.gt, self.front, self.resized_56, self.resized_112 = self.data_feed.get_train()
+                self.profile, self.front = self.data_feed.get_train()
                 
                 # Construct Model
                 self.build_arch()
@@ -69,9 +75,9 @@ class WGAN_GP(object):
                                  self.dis_loss,
                                  global_step=self.global_step, var_list=self.vars_dis)
             else:
-                self.profile = tf.placeholder("float", [None, 224, 224, 3], 'profile')
+                self.profile = tf.placeholder("float", [None, cfg.height, cfg.width, cfg.channel], 'profile')
                 self.is_train = tf.placeholder(tf.bool, name='is_train')
-                self.front = tf.placeholder("float", [None, 224, 224, 3], 'front')
+                self.front = tf.placeholder("float", [None, cfg.height, cfg.width, cfg.channel], 'front')
                 
                 self.build_arch()
                 
@@ -81,7 +87,7 @@ class WGAN_GP(object):
         # Use pretrained model(vgg-face) as encoder of Generator
         self.feature_p = self.face_model.forward(self.profile,'profile_enc')
         self.feature_f = self.face_model.forward(self.front, 'front_enc')
-        print 'Face model output feature shape:', self.feature_p[3].get_shape()
+        print 'Face model output feature shape:', self.feature_p[-1].get_shape()
         
         # Decoder front face from vgg feature
         self.gen_p = self.decoder(self.feature_p)
@@ -89,9 +95,9 @@ class WGAN_GP(object):
         print 'Generator output shape:', self.gen_p.get_shape()
         
         # Map texture into features again by VGG    
-        _,_,_, self.pool5_gen_p = self.face_model.forward(self.gen_p,'profile_gen_enc')
-        _,_,_, self.pool5_gen_f = self.face_model.forward(self.gen_f, 'front_gen_enc')
-        print 'Feature of Generated Image shape:', self.pool5_gen_p.get_shape()
+        self.feature_gen_p = self.face_model.forward(self.gen_p,'profile_gen_enc')
+        self.feature_gen_f = self.face_model.forward(self.gen_f, 'front_gen_enc')
+        print 'Feature of Generated Image shape:', self.feature_gen_p[-1].get_shape()
         
         # Construct discriminator between generalized front face and ground truth
         self.dr = self.discriminator(self.front)
@@ -116,7 +122,7 @@ class WGAN_GP(object):
             feature: face identity feature from VGG-16 / VGG-res50.
             reuse: Whether to reuse the model(Default False).
         return: 
-            generated front face in [0, 255].
+            generated front face, which value is in range [0, 255].
         """
         # The feature vector extracted from profile by VGG-16 is 4096-D
         # The feature vector extracted from profile by Resnet-50 is 2048-D

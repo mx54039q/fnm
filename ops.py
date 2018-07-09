@@ -64,6 +64,12 @@ class batch_norm(object):
                         scope=self.name)
 
 class batch_norm_mosv(object):
+    """Batch normalization with mean, offset, scale and variance
+    
+    This class is for load pretrained model from binary file (e.g. caffe model).
+    Read parameters of mean, offset, scale and variance.
+    
+    """
     def __init__(self, mosv_dict, name="batch_norm"):
         with tf.variable_scope(name):
             self.name = name
@@ -82,6 +88,8 @@ class batch_norm_mosv(object):
                                          name=self.name)
                           
 def local(x,filters,name,kernel_size=3,strides=[1,1],padding='valid'):
+    """Local layer
+    """
     with tf.variable_scope(name):
         return tf.contrib.keras.layers.LocallyConnected2D(
                  filters=filters,
@@ -158,6 +166,8 @@ def lrelu(x, leak=0.2, name="lrelu"):
     return tf.maximum(x, leak*x)
 
 def res_block(inputs, name, is_train, normal='bn',kernel_size = 3, strides = 1, padding='same', bias=cfg.use_bias):
+    """Residual block with batch normalization
+    """
     with tf.variable_scope(name):
         norm = bn if(normal=='bn') else pixel_norm 
         filters = inputs.get_shape().as_list()[-1]
@@ -168,6 +178,8 @@ def res_block(inputs, name, is_train, normal='bn',kernel_size = 3, strides = 1, 
         return tf.nn.relu(tf.add(inputs, conv2))
 
 def res_block_ln(inputs, name, kernel_size = 3, strides = 1, padding='same', bias=cfg.use_bias):
+    """Residual block with layer normalization
+    """
     with tf.variable_scope(name):
         filters = inputs.get_shape().as_list()[-1]
         conv1 = tf.nn.relu(slim.layer_norm(conv2d(inputs, filters, 'conv1', 
