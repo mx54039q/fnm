@@ -9,7 +9,14 @@ from ops import *
 epsilon = 1e-9
 
 class WGAN(object):
-    """
+    """Class for Feature-embedded and Attention GAN
+    
+    This class is for face normalization task, including the following three contributions.
+    
+    1. Feature-embedded: Embedding pretrained face recognition model in G.
+    2. Attention Mechanism: Attention Discriminator for elaborate image.
+    3. Pixel Loss: front-to-front transform introduce pixel-wise loss.
+    
     version: 
     1. Feed模式读取训练图片
     2. G_enc为VGG2, G_dec为全卷积网络, Pixel-Wise Normalization和ReLU, 最后一层不用PN, 上采样反卷积(k4s2),
@@ -48,9 +55,6 @@ class WGAN(object):
                 
                 # Trainer
                 self.global_step = tf.Variable(0, name='global_step', trainable=False)
-                self.train_wu = tf.train.AdamOptimizer(cfg.lr, beta1=cfg.beta1, beta2=cfg.beta2).minimize(
-                                self.wu_loss,
-                                global_step=self.global_step, var_list=self.vars_gen)
                 self.train_gen = tf.train.AdamOptimizer(cfg.lr, beta1=cfg.beta1, beta2=cfg.beta2).minimize(
                                  self.gen_loss,
                                  global_step=self.global_step, var_list=self.vars_gen)
@@ -71,6 +75,13 @@ class WGAN(object):
         tf.logging.info('Seting up the main structure')
 
     def build_arch(self):
+        """Build up architecture
+        
+        1. Pretrained face recognition model forward
+        2. Decoder from feature to image
+        3. Refeed generated image to face recognition model
+        4. Feed generated image to Discriminator
+        """
         # Use pretrained model(vgg-face) as encoder of Generator
         self.feature_p = self.face_model.forward(self.profile,'profile_enc')
         self.feature_f = self.face_model.forward(self.front, 'front_enc')
@@ -92,199 +103,224 @@ class WGAN(object):
         self.df2 = self.discriminator(self.gen_f, reuse=True)
         
     def decoder(self, feature, reuse=False):
-        """
-        decoder of generator, decoder feature from vgg
+        """Decoder part of generator
+        
+        Embed pretrained face recognition model in Generator.
+        This part transforms feature to image. 
+        
         args: 
-            feature: face identity feature from VGG-16 / VGG-res50.
+            feature: face identity feature from pretrained face model.
             reuse: Whether to reuse the model(Default False).
         return: 
-            3 scale generated front face in [0, 255].
+            generated front face, which value is in range [0, 255].
         """
-        # The feature vector extract from profile by VGG-16 is 4096-D
-        # The feature vector extract from profile by Resnet-50 is 2048-D
-        with tf.variable_scope('decoder', reuse=reuse) as scope:        
-            # Stacked Transpose Convolutions:(2048)
-            g_input = tf.reshape(feature, [-1, 1, 1, 2048])
-            with tf.variable_scope('dconv0'):
-                dconv0 = tf.nn.relu(ins_norm(deconv2d(g_input, 512, 'dconv0', 
-                                    kernel_size=4, strides = 1, padding='valid')))
-            #ouput shape: [4, 4, 512]
-            with tf.variable_scope('dconv1'):
-                dconv1 = tf.nn.relu(ins_norm(deconv2d(dconv0, 512, 'dconv1', 
-                                        kernel_size=4, strides = 1, padding='valid')))
-            #input shape: [7, 7, 512]
-            with tf.variable_scope('dconv3'):
-                dconv3 = tf.nn.relu(ins_norm(deconv2d(dconv1, 256, 'dconv3', 
-                                        kernel_size=4, strides = 2)))
+        # The feature vector extracted from profile by VGG-16 is 4096-D
+        # The feature vector extracted from profile by Resnet-50 is 2048-D
+        with tf.variable_scope('decoder', reuse=reuse) as scope:
+            # Choose Normalization Method
+            norm = bn if(cfg.norm=='bn') else pixel_norm
+            
+            # Split feature tuple
+            feat28,feat14,feat7,pool5 = feature[0],feature[1],feature[2],feature[3]
+            
+            # We use the last second feature layer of face model, whose shape is
+            # 7 x 7 x 2048. If you use 'flatten feature', you should connect 
+            # 'Fully Connect Layer' first to expand dimension of feature. You can
+            # use code below and modify the whole network.
+            if 0:   
+                g_input = tf.reshape(fullyConnect(pool5, 4*4*512, 'fc0'), [-1, 4, 4, 512])
+                #ouput shape: [4, 4, 512]
+                with tf.variable_scope('dconv1'):
+                    dconv1 = tf.nn.relu(norm(deconv2d(g_input, 256, 'dconv1', 
+                                            kernel_size=4, strides = 1, padding='valid'),self.is_train,'norm1'))
+                res1 = res_block(dconv1, 'res1', self.is_train, cfg.norm)
+            
+            # input shape: [7, 7, 2048]
+            with tf.variable_scope('conv0'):
+                feat7 = tf.nn.relu(conv2d(feat7, 512, 'conv1', kernel_size=1, strides = 1))
+            # ouput shape: [7, 7, 512]
+            res1_0 = res_block(feat7, 'res1_0',self.is_train, cfg.norm)
+            res1_1 = res_block(res1_0, 'res1_1',self.is_train, cfg.norm)
+            res1_2 = res_block(res1_1, 'res1_2',self.is_train, cfg.norm)
+            res1_3 = res_block(res1_2, 'res1_3',self.is_train, cfg.norm)
+            #ouput shape: [7, 7, 512]
+            with tf.variable_scope('dconv2'):
+                #feat7 = tf.nn.relu(norm(conv2d(feat7, 256, 'feat7', kernel_size=1),self.is_train,'norm2_1'))
+                dconv2 = tf.nn.relu(norm(deconv2d(res1_3, 256, 'dconv2', 
+                                        kernel_size=4, strides = 2),self.is_train,'norm2_2'))
+            res2 = res_block(dconv2, 'res2',self.is_train, cfg.norm)
             #ouput shape: [14, 14, 256]
-            with tf.variable_scope('dconv4'):
-                dconv4 = tf.nn.relu(ins_norm(deconv2d(dconv3, 128, 'dconv4', 
-                                        kernel_size=4, strides = 2)))
+            with tf.variable_scope('dconv3'):
+                #feat14 = tf.nn.relu(norm(conv2d(feat14, 128, 'feat14', kernel_size=1),self.is_train,'norm3_1'))
+                dconv3 = tf.nn.relu(norm(deconv2d(res2, 128, 'dconv2', 
+                                        kernel_size=4, strides = 2),self.is_train,'norm3_2'))
+            res3 = res_block(dconv3, 'res3',self.is_train, cfg.norm)
             #output shape: [28, 28, 128]
-            with tf.variable_scope('dconv5'):
-                dconv5 = tf.nn.relu(ins_norm(deconv2d(dconv4, 64, 'dconv5', 
-                                        kernel_size=4, strides = 2)))
+            with tf.variable_scope('dconv4'):
+                #feat28 = tf.nn.relu(norm(conv2d(feat28, 64, 'feat28', kernel_size=1),self.is_train,'norm4_1'))
+                dconv4 = tf.nn.relu(norm(deconv2d(res3, 64, 'dconv4', 
+                                        kernel_size=4, strides = 2),self.is_train,'norm4_2'))
+            res4 = res_block(dconv4, 'res4',self.is_train, cfg.norm)
             #output shape: [56, 56, 64]
-            with tf.variable_scope('dconv5_concat'):
-                fc1 = tf.nn.relu(fullyConnect(feature, 56 * 56, 'fc1'))
-                fc1 = tf.reshape(fc1, [-1,56,56,1])
-                fc1 = tf.tile(fc1, [1, 1, 1, 16])
-                dconv5_concat = tf.concat([dconv5, fc1], 3)
-            #output shape: [56, 56, 80]
-            with tf.variable_scope('res1'):
-                res1_conv1 = tf.nn.relu(ins_norm(conv2d(dconv5_concat, 128, 'conv1', 
-                                        kernel_size=4, strides = 1)))
-                res1_conv2 = ins_norm(conv2d(res1_conv1, 80, 'conv2', 
-                                        kernel_size=4, strides = 1))
-                res1 = tf.nn.relu(tf.add(dconv5_concat, res1_conv2))
-            #output shape: [56, 56, 80]
+            with tf.variable_scope('dconv5'):
+                dconv5 = tf.nn.relu(norm(deconv2d(res4, 32, 'dconv5', kernel_size=4, strides = 2),self.is_train,'norm5'))
+            res5 = res_block(dconv5, 'res5',self.is_train, cfg.norm)
+            #input shape: [112, 112, 32]
             with tf.variable_scope('dconv6'):
-                dconv6 = tf.nn.relu(ins_norm(deconv2d(res1, 32, 'dconv6', 
-                                        kernel_size=4, strides = 2)))
-            #output shape: [112, 112, 32]
-            with tf.variable_scope('dconv6_concat'):
-                fc2 = tf.nn.relu(fullyConnect(feature, 112 * 112, 'fc2'))
-                fc2 = tf.reshape(fc2, [-1,112,112,1])
-                fc2 = tf.tile(fc2, [1, 1, 1, 8])
-                dconv6_concat = tf.concat([dconv6, fc2], 3)
-            #output shape: [112, 112, 40]
-            with tf.variable_scope('res2'):
-                res2_conv1 = tf.nn.relu(ins_norm(conv2d(dconv6_concat, 64, 'conv1', 
-                                        kernel_size=4, strides = 1)))
-                res2_conv2 = ins_norm(conv2d(res2_conv1, 40, 'conv2', 
-                                        kernel_size=4, strides = 1))
-                res2 = tf.nn.relu(tf.add(dconv6_concat, res2_conv2))
-            #input shape: [112, 112, 40]
-            with tf.variable_scope('dconv7'):
-                dconv7 = tf.nn.relu(ins_norm(deconv2d(res2, 32, 'dconv7', 
-                                        kernel_size=4, strides = 2)))
+                dconv6 = tf.nn.relu(norm(deconv2d(res5, 32, 'dconv6', kernel_size=4, strides = 2),self.is_train,'norm6'))
+            res6 = res_block(dconv6, 'res6',self.is_train, cfg.norm)
             #output shape: [224, 224, 32]
-            with tf.variable_scope('cw_conv_56'):
-                gen_56 = tf.nn.tanh(conv2d(dconv5, 3, 'pw_conv', kernel_size=4, strides = 1,
-                                 bias=False))
-            with tf.variable_scope('cw_conv_112'):
-                gen_112 = tf.nn.tanh(conv2d(dconv6, 3, 'pw_conv', kernel_size=4, strides = 1,
-                                 bias=False))
-            with tf.variable_scope('cw_conv_224'):
-                gen_224 = tf.nn.tanh(conv2d(dconv7, 3, 'pw_conv', kernel_size=4, strides = 1,
-                                 bias=False))
+            with tf.variable_scope('cw_conv'):
+                gen = tf.nn.tanh(conv2d(res6, 3, 'pw_conv', kernel_size=1, strides = 1))
         
-            return (gen_56+1)*127.5, (gen_112+1)*127.5, (gen_224+1)*127.5
+            return (gen + 1) * 127.5
         
-    def discriminator(self, images_56, images_112, images_224, reuse=False):
-        """
-        patch GAN, output logits shape [bs, 4, 4, 1]
+    def discriminator(self, images, reuse=False):
+        """Attention Discriminator Network
+        
+        As normalized face is strictly aligned, we construct 
+        Attention Discriminators on fixed area of face image 
+        (i.e. whole image, eyes, nose, mouth, face). This 
+        contribution make Discriminator focus on local area, 
+        and make Generator produce more elaborate detail.       
+        
+        1. Waasertein Distance
+        2. Batch Normalization, LReLU, Stride Convolution
+        
         args: 
-            image_56: front face in [0,255]. [56,56,3]
-            image_112: front face in [0,255]. [112,112,3]
-            image_224: front face in [0,255]. [224,224,3]
+            image: front face in range [0,255].
             reuse: Whether to reuse the model(Default False).
         return: 
-            3 pairs of sidmoid(logits) and logits.
+            a set of and logits.
         """
+        
         with tf.variable_scope("discriminator", reuse=reuse) as scope:
-            with tf.variable_scope("dis_0"):
-                d0_bn1 = batch_norm(name='bn1')
-                d0_bn2 = batch_norm(name='bn2')
-                d0_bn3 = batch_norm(name='bn3')
-                d0_bn4 = batch_norm(name='bn4')
-                d0_bn5 = batch_norm(name='bn5')
-                
-                images_224 = images_224 / 127.5 - 1
+            norm = bn
+            
+            images = images / 127.5 - 1
+            bs = images.get_shape().as_list()[0]
+            
+            # Four Fixed Area. Modify them to fit your dataset
+            eyes = tf.slice(images, [0,64,50,0], [bs,36,124,cfg.channel]) #[64:100,50:174,:]
+            nose = tf.slice(images, [0,75,90,0], [bs,65,44,cfg.channel]) #[75:140,90:134,:]
+            mouth = tf.slice(images, [0,140,75,0], [bs,30,74,cfg.channel]) #[140:170,75:149,:]
+            face = tf.slice(images, [0,64,50,0], [bs,116,124,cfg.channel]) #[64:180,50:174,:]
+            with tf.variable_scope("images"):
                 with tf.variable_scope('d_conv0'):
-                    d0_h0 = lrelu(conv2d(images_224, 32, 'd_conv0', kernel_size=4, strides=2))
+                    h0_0 = lrelu(conv2d(images, 32, 'd_conv0', kernel_size=4, strides=2))
                 # h0 is (112 x 112 x 32)
                 with tf.variable_scope('d_conv1'):
-                    d0_h1 = lrelu(d0_bn1(conv2d(d0_h0, 64, 'd_conv1', kernel_size=4, strides=2)))
+                    h0_1 = lrelu(norm(conv2d(h0_0, 64, 'd_conv1', kernel_size=4, strides=2),self.is_train))
                 # h1 is (56 x 56 x 64)
                 with tf.variable_scope('d_conv2'):
-                    d0_h2 = lrelu(d0_bn2(conv2d(d0_h1, 128, 'd_conv2', kernel_size=4, strides=2)))
+                    h0_2 = lrelu(norm(conv2d(h0_1, 128, 'd_conv2', kernel_size=4, strides=2),self.is_train))
                 # h2 is (28 x 28 x 128)
                 with tf.variable_scope('d_conv3'):
-                    d0_h3 = lrelu(d0_bn3(conv2d(d0_h2, 256, 'd_conv3', kernel_size=4, strides=2)))
+                    h0_3 = lrelu(norm(conv2d(h0_2, 256, 'd_conv3', kernel_size=4, strides=2),self.is_train))
                 # h3 is (14 x 14 x 256)
                 with tf.variable_scope('d_conv4'):
-                    d0_h4 = lrelu(d0_bn4(conv2d(d0_h3, 256, 'd_conv4', kernel_size=4, strides=2)))
+                    h0_4 = lrelu(norm(conv2d(h0_3, 256, 'd_conv4', kernel_size=4, strides=2),self.is_train))
                 # h4 is (7 x 7 x 256)
-                with tf.variable_scope('d_conv5'):
-                    d0_h5 = lrelu(d0_bn5(conv2d(d0_h4, 256, 'd_conv5', kernel_size=4, strides=2)))
-                # h5 is (4 x 4 x 256)
-                d0_h6 = conv2d(d0_h5, 1, 'd_conv6', kernel_size=4, strides=1, padding='valid', bias=False)
-                # h6 is (1 x 1 x 1)
-                
-            with tf.variable_scope("dis_1"):
-                d1_bn1 = batch_norm(name='bn1')
-                d1_bn2 = batch_norm(name='bn2')
-                d1_bn3 = batch_norm(name='bn3')
-                d1_bn4 = batch_norm(name='bn4')
-                
-                images_112 = images_112 / 127.5 - 1
+                with tf.variable_scope('d_fc'):
+                    h0_4 = tf.reshape(h0_4, [bs, -1])
+                    h0_5 = fullyConnect(h0_4, 1, 'd_fc')
+                # h5 is (1)
+            with tf.variable_scope("eyes"):
                 with tf.variable_scope('d_conv0'):
-                    d1_h0 = lrelu(conv2d(images_112, 32, 'd_conv0', kernel_size=4, strides=2))
-                # h0 is (56 x 56 x 32)
+                    h1_0 = lrelu(conv2d(eyes, 32, 'd_conv0', kernel_size=4, strides=2))
+                # h0 is (18 x 62 x 32)
                 with tf.variable_scope('d_conv1'):
-                    d1_h1 = lrelu(d1_bn1(conv2d(d1_h0, 64, 'd_conv1', kernel_size=4, strides=2)))
-                # h1 is (28 x 28 x 64)
+                    h1_1 = lrelu(norm(conv2d(h1_0, 64, 'd_conv1', kernel_size=4, strides=2),self.is_train))
+                # h1 is (9 x 31 x 64)
                 with tf.variable_scope('d_conv2'):
-                    d1_h2 = lrelu(d1_bn2(conv2d(d1_h1, 128, 'd_conv2', kernel_size=4, strides=2)))
-                # h2 is (14 x 14 x 128)
+                    h1_2 = lrelu(norm(conv2d(h1_1, 128, 'd_conv2', kernel_size=4, strides=2),self.is_train))
+                # h2 is (5 x 15 x 128)
                 with tf.variable_scope('d_conv3'):
-                    d1_h3 = lrelu(d1_bn3(conv2d(d1_h2, 256, 'd_conv3', kernel_size=4, strides=2)))
-                # h3 is (7 x 7 x 256)
-                with tf.variable_scope('d_conv4'):
-                    d1_h4 = lrelu(d1_bn4(conv2d(d1_h3, 256, 'd_conv4', kernel_size=4, strides=2)))
-                # h4 is (4 x 4 x 256)
-                d1_h5 = conv2d(d1_h4, 1, 'd_conv5', kernel_size=4, strides=1, padding='valid', bias=False)
-                # h5 is (1 x 1 x 1)
-                
-            with tf.variable_scope("dis_2"):
-                d2_bn1 = batch_norm(name='bn1')
-                d2_bn2 = batch_norm(name='bn2')
-                d2_bn3 = batch_norm(name='bn3')
-                
-                images_56 = images_56 / 127.5 - 1
+                    h1_3 = lrelu(norm(conv2d(h1_2, 256, 'd_conv3', kernel_size=4, strides=2),self.is_train))
+                # h3 is (3 x 8 x 256)
+                with tf.variable_scope('d_fc'):
+                    h1_3 = tf.reshape(h1_3, [bs, -1])
+                    h1_4 = fullyConnect(h1_3, 1, 'd_fc')
+                # h4 is (1)
+            with tf.variable_scope("nose"):
                 with tf.variable_scope('d_conv0'):
-                    d2_h0 = lrelu(conv2d(images_56, 32, 'd_conv0', kernel_size=4, strides=2))
-                # h0 is (28 x 28 x 32)
+                    h2_0 = lrelu(conv2d(nose, 32, 'd_conv0', kernel_size=4, strides=2))
+                # h0 is (33 x 22 x 32)
                 with tf.variable_scope('d_conv1'):
-                    d2_h1 = lrelu(d2_bn1(conv2d(d2_h0, 64, 'd_conv1', kernel_size=4, strides=2)))
-                # h1 is (14 x 14 x 64)
+                    h2_1 = lrelu(norm(conv2d(h2_0, 64, 'd_conv1', kernel_size=4, strides=2),self.is_train))
+                # h1 is (17 x 11 x 64)
                 with tf.variable_scope('d_conv2'):
-                    d2_h2 = lrelu(d2_bn2(conv2d(d2_h1, 128, 'd_conv2', kernel_size=4, strides=2)))
-                # h2 is (7 x 7 x 128)
+                    h2_2 = lrelu(norm(conv2d(h2_1, 128, 'd_conv2', kernel_size=4, strides=2),self.is_train))
+                # h2 is (9 x 6 x 128)
                 with tf.variable_scope('d_conv3'):
-                    d2_h3 = lrelu(d2_bn3(conv2d(d2_h2, 256, 'd_conv3', kernel_size=4, strides=2)))
-                # h3 is (4 x 4 x 256)
-                d2_h4 = conv2d(d2_h3, 1, 'd_conv4', kernel_size=4, strides=1, padding='valid', bias=False)
-                # h4 is (1 x 1 x 1)
-                
-        return tf.nn.sigmoid(d2_h4), d2_h4, tf.nn.sigmoid(d1_h5), d1_h5, tf.nn.sigmoid(d0_h6), d0_h6
+                    h2_3 = lrelu(norm(conv2d(h2_2, 256, 'd_conv3', kernel_size=4, strides=2),self.is_train))
+                # h3 is (5 x 3 x 256)
+                with tf.variable_scope('d_fc'):
+                    h2_3 = tf.reshape(h2_3, [bs, -1])
+                    h2_4 = fullyConnect(h2_3, 1, 'd_fc')
+                # h4 is (1)
+            with tf.variable_scope("mouth"):
+                with tf.variable_scope('d_conv0'):
+                    h3_0 = lrelu(conv2d(mouth, 32, 'd_conv0', kernel_size=4, strides=2))
+                # h0 is (15 x 37 x 32)
+                with tf.variable_scope('d_conv1'):
+                    h3_1 = lrelu(norm(conv2d(h3_0, 64, 'd_conv1', kernel_size=4, strides=2),self.is_train))
+                # h1 is (8 x 19 x 64)
+                with tf.variable_scope('d_conv2'):
+                    h3_2 = lrelu(norm(conv2d(h3_1, 128, 'd_conv2', kernel_size=4, strides=2),self.is_train))
+                # h2 is (4 x 10 x 128)
+                with tf.variable_scope('d_conv3'):
+                    h3_3 = lrelu(norm(conv2d(h3_2, 256, 'd_conv3', kernel_size=4, strides=2),self.is_train))
+                # h3 is (2 x 5 x 256)
+                with tf.variable_scope('d_fc'):
+                    h3_3 = tf.reshape(h3_3, [bs, -1])
+                    h3_4 = fullyConnect(h3_3, 1, 'd_fc')
+                # h4 is (1)
+            with tf.variable_scope("face"):
+                with tf.variable_scope('d_conv0'):
+                    h4_0 = lrelu(conv2d(face, 32, 'd_conv0', kernel_size=4, strides=2))
+                # h0 is (58 x 62 x 32)
+                with tf.variable_scope('d_conv1'):
+                    h4_1 = lrelu(norm(conv2d(h4_0, 64, 'd_conv1', kernel_size=4, strides=2),self.is_train))
+                # h1 is (29 x 31 x 64)
+                with tf.variable_scope('d_conv2'):
+                    h4_2 = lrelu(norm(conv2d(h4_1, 128, 'd_conv2', kernel_size=4, strides=2),self.is_train))
+                # h2 is (15 x 16 x 128)
+                with tf.variable_scope('d_conv3'):
+                    h4_3 = lrelu(norm(conv2d(h4_2, 256, 'd_conv3', kernel_size=4, strides=2),self.is_train))
+                # h3 is (8 x 8 x 256)
+                with tf.variable_scope('d_fc'):
+                    h4_3 = tf.reshape(h4_3, [bs, -1])
+                    h4_4 = fullyConnect(h4_3, 1, 'd_fc')
+                # h4 is (1)
+            
+            return h0_5, h1_4, h2_4, h3_4, h4_4
 
     def loss(self):
-        """
-        Loss Functions
+        """Loss Functions
+        
+        1. Pixel-Wise Loss: front-to-front reconstruct
+        2. Perceptual Loss: Feature distance on space of pretrined face model
+        3. Regulation Loss: L2 weight regulation
+        4. Adversarial Loss: Wasserstein Distance
+        5. Symmetric Loss: NOT APPLY
+        6. Drift Loss: NOT APPLY
         """
         with tf.name_scope('loss') as scope:
+            with tf.name_scope('FeatureNorm'):
+                pool5_p_norm = self.feature_p[-1] / (tf.norm(self.feature_p[-1], axis=1,keep_dims=True) + epsilon)
+                pool5_f_norm = self.feature_f[-1] / (tf.norm(self.feature_f[-1], axis=1,keep_dims=True) + epsilon)
+                pool5_gen_p_norm = self.feature_gen_p[-1] / (tf.norm(self.feature_gen_p[-1], axis=1,keep_dims=True) + epsilon)
+                pool5_gen_f_norm = self.feature_gen_f[-1] / (tf.norm(self.feature_gen_f[-1], axis=1,keep_dims=True) + epsilon)
+                        
             # 1. Frontalization Loss: L1-Norm
-            with tf.name_scope('Pixel_Loss'):
-                #face_mask = Image.open('tt.bmp').crop([13,13,237,237])
-                #face_mask = np.array(face_mask, dtype=np.float32).reshape(224,224,1) / 255.0
-                #face_mask = np.tile(face_mask, [cfg.batch_size, 1, 1, 3])
-                #self.front_loss = tf.losses.absolute_difference(labels=self.front, 
-                #                                                predictions=self.texture)
-                self.front_loss = tf.reduce_mean(tf.abs(self.gt/255. - self.texture_224/255.))
-                tf.add_to_collection('losses', self.front_loss)
-            
+            self.front_loss = tf.reduce_mean(tf.reduce_sum(tf.abs(self.front/255. - self.gen_f/255.), [1,2,3]))
+          
             # 2. Feature Loss: Cosine-Norm / L2-Norm
             with tf.name_scope('Perceptual_Loss'):
-                enc_fea_recon_norm = self.enc_fea_recon / tf.norm(self.enc_fea_recon,
-                    axis=1,keep_dims=True)
-                enc_fea_recon_gt_norm = self.enc_fea / tf.norm(self.enc_fea,
-                    axis=1,keep_dims=True)
-                self.feature_loss = tf.losses.cosine_distance(labels=enc_fea_recon_gt_norm,
-                    predictions=enc_fea_recon_norm, dim=1)
-                #self.feature_loss = tf.losses.mean_squared_error(labels=self.enc_fea_recon,
-                #                                                 predictions=self.enc_fea) #
+                self.feature_distance = (1-cfg.w_f)*(1 - tf.reduce_sum(tf.multiply(pool5_p_norm, pool5_gen_p_norm), [1])) + \
+                               cfg.w_f*(1 - tf.reduce_sum(tf.multiply(pool5_f_norm, pool5_gen_f_norm), [1]))
+                self.feature_loss = tf.reduce_mean(self.feature_distance) #/ 2 
                 tf.add_to_collection('losses', self.feature_loss)
             
             # 3. L2 Regulation Loss
@@ -302,34 +338,31 @@ class WGAN(object):
             
             # 4. Adversarial Loss
             with tf.name_scope('Adversarial_Loss'):
-                self.d_loss = (tf.reduce_mean(self.df_56_logits) + 
-                               tf.reduce_mean(self.df_112_logits) + 
-                               tf.reduce_mean(self.df_224_logits) - 
-                               tf.reduce_mean(self.dr_56_logits) - 
-                               tf.reduce_mean(self.dr_112_logits) -
-                               tf.reduce_mean(self.dr_224_logits)) / 6 #
-                self.g_loss = (- tf.reduce_mean(self.df_56_logits) -
-                              tf.reduce_mean(self.df_112_logits) -
-                              tf.reduce_mean(self.df_224_logits)) / 3
+                self.d_loss = tf.reduce_mean(tf.add_n(self.df1)*(1-cfg.w_f) + tf.add_n(self.df2)*cfg.w_f - tf.add_n(self.dr)) / 5
+                self.g_loss = - tf.reduce_mean(tf.add_n(self.df1)*(1-cfg.w_f) + tf.add_n(self.df2)*cfg.w_f) / 5
                 tf.add_to_collection('losses', self.d_loss)
                 tf.add_to_collection('losses', self.g_loss)
             
             # 5. Symmetric Loss
             with tf.name_scope('Symmetric_Loss'):
-                mirror_image = tf.reverse(self.texture_224, axis=[2])
-                self.sym_loss = tf.reduce_mean(tf.abs(mirror_image/255. - self.texture_224/255.))
-           
-            # 6. Total Loss
+                mirror_p = tf.reverse(self.gen_p, axis=[2])
+                self.sym_loss = tf.reduce_mean(tf.reduce_sum(tf.abs(mirror_p/225. - self.gen_p/255.), [1,2,3]))
+            
+            # 6. Drift Loss
+            with tf.name_scope('Drift_Loss'):
+                self.drift_loss = 0
+                #tf.reduce_mean(tf.add_n(tf.square(self.df)) + tf.add_n(tf.square(self.dr))) / 10
+            
+            # 7. Total Loss
             with tf.name_scope('Total_Loss'):
-                self.wu_loss = cfg.lambda_l1 * self.front_loss + cfg.lambda_fea * self.feature_loss + \
-                               cfg.lambda_sym * self.sym_loss + self.reg_gen
                 self.gen_loss = cfg.lambda_l1 * self.front_loss + cfg.lambda_fea * self.feature_loss + \
-                                cfg.lambda_gan * self.g_loss + cfg.lambda_sym * self.sym_loss + self.reg_gen
+                                cfg.lambda_gan * self.g_loss + self.reg_gen
                 self.dis_loss = cfg.lambda_gan * self.d_loss + self.reg_dis
                 
     def _summary(self):
-        """
-        Tensorflow Summary
+        """Tensorflow Summary
+        
+        Add Summary as you like
         """
         train_summary = []
         train_summary.append(tf.summary.scalar('train/front_loss', self.front_loss))
@@ -339,140 +372,7 @@ class WGAN(object):
         #correct_prediction = tf.equal(tf.to_int32(self.labels), self.argmax_idx)
         #self.batch_accuracy = tf.reduce_sum(tf.cast(correct_prediction, tf.float32))
         #self.test_acc = tf.placeholder_with_default(tf.constant(0.), shape=[])
-    
-    def decoder_multi_scale_bn(self, feature, y=None, reuse=False):
-        """
-        decoder of generator, decoder feature from vgg
-        input: face identity feature from VGG-16 / VGG-res50
-        return: generated front face [0, 255].
-        """
-        # The feature vector extract from profile by VGG-16 is 4096-D
-        # The feature vector extract from profile by Resnet-50 is 2048-D
-        with tf.variable_scope('decoder', reuse=reuse) as scope:
-            # Construct BatchNorm Layer
-            #bn0 = batch_norm(name='bn0')
-            bn0 = batch_norm(name='bn0')
-            bn1 = batch_norm(name='bn1')
-            bn2 = batch_norm(name='bn2')
-            bn3 = batch_norm(name='bn3')
-            bn4 = batch_norm(name='bn4')
-            bn5 = batch_norm(name='bn5')
-            bn6 = batch_norm(name='bn6')
-            bn7 = batch_norm(name='bn7')
-            res1_bn1 = batch_norm(name='res1_bn1')
-            res1_bn2 = batch_norm(name='res1_bn2')
-            res1_bn3 = batch_norm(name='res1_bn3')
-            res2_bn1 = batch_norm(name='res2_bn1')
-            res2_bn2 = batch_norm(name='res2_bn2')
-            res2_bn3 = batch_norm(name='res2_bn3')
-            
-            # map from fc7_encoder to 7 × 7 × 256 localized features
-            #fc1 = fullyConnect(feature, 7 * 7 * 256, 'fc1') # bn0()
-            #fc1 = tf.reshape(fc1, [-1,7,7,256])
 
-            # Stacked Transpose Convolutions:(2048)
-            g_input = tf.reshape(feature, [-1, 1, 1, 2048])
-            with tf.variable_scope('dconv0'):
-                dconv0 = tf.nn.relu(deconv2d(g_input, 512, 'dconv0', 
-                                    kernel_size=4, strides = 1, padding='valid'))
-            #ouput shape: [4, 4, 512]
-            with tf.variable_scope('dconv1'):
-                dconv1 = tf.nn.relu(bn1(deconv2d(dconv0, 512, 'dconv1', 
-                                        kernel_size=4, strides = 1, padding='valid'), self.is_train))
-            #input shape: [7, 7, 512]
-            with tf.variable_scope('dconv3'):
-                dconv3 = tf.nn.relu(bn3(deconv2d(dconv1, 256, 'dconv3', 
-                                        kernel_size=4, strides = 2), self.is_train))
-            #ouput shape: [14, 14, 256]
-            with tf.variable_scope('dconv4'):
-                dconv4 = tf.nn.relu(bn4(deconv2d(dconv3, 128, 'dconv4', 
-                                        kernel_size=4, strides = 2), self.is_train))
-            #output shape: [28, 28, 128]
-            with tf.variable_scope('dconv5'):
-                dconv5 = tf.nn.relu(bn5(deconv2d(dconv4, 64, 'dconv5', 
-                                        kernel_size=4, strides = 2), self.is_train))
-            #output shape: [56, 56, 64]
-            with tf.variable_scope('dconv5_concat'):
-                fc1 = fullyConnect(feature, 56 * 56, 'fc1') # bn0()
-                fc1 = tf.reshape(fc1, [-1,56,56,1])
-                fc1 = tf.tile(fc1, [1, 1, 1, 16])
-                dconv5_concat = tf.concat([dconv5, fc1], 3)
-            #output shape: [56, 56, 80]
-            with tf.variable_scope('res1'):
-                res1_conv1 = tf.nn.relu(res1_bn1(conv2d(dconv5_concat, 128, 'conv1', 
-                                        kernel_size=4, strides = 1), self.is_train))
-                res1_conv2 = res1_bn2(conv2d(res1_conv1, 80, 'conv2', 
-                                        kernel_size=4, strides = 1), self.is_train)
-                res1 = tf.nn.relu(tf.add(dconv5_concat, res1_conv2))
-            #output shape: [56, 56, 80]
-            with tf.variable_scope('dconv6'):
-                dconv6 = tf.nn.relu(bn6(deconv2d(res1, 32, 'dconv6', 
-                                        kernel_size=4, strides = 2), self.is_train))
-            #output shape: [112, 112, 32]
-            with tf.variable_scope('dconv6_concat'):
-                fc2 = fullyConnect(feature, 112 * 112, 'fc2')
-                fc2 = tf.reshape(fc2, [-1,112,112,1])
-                fc2 = tf.tile(fc2, [1, 1, 1, 8])
-                dconv6_concat = tf.concat([dconv6, fc2], 3)
-            #output shape: [112, 112, 40]
-            with tf.variable_scope('res2'):
-                res2_conv1 = tf.nn.relu(res2_bn1(conv2d(dconv6_concat, 64, 'conv1', 
-                                        kernel_size=4, strides = 1), self.is_train))
-                res2_conv2 = res2_bn2(conv2d(res2_conv1, 40, 'conv2', 
-                                        kernel_size=4, strides = 1), self.is_train)
-                res2 = tf.nn.relu(tf.add(dconv6_concat, res2_conv2))
-            #input shape: [112, 112, 40]
-            with tf.variable_scope('dconv7'):
-                dconv7 = tf.nn.relu(bn7(deconv2d(res2, 32, 'dconv7', 
-                                        kernel_size=4, strides = 2), self.is_train))
-            #output shape: [224, 224, 32]
-            with tf.variable_scope('cw_conv_56'):
-                gen_56 = conv2d(dconv5, 3, 'pw_conv', kernel_size=4, strides = 1,
-                                 activation = tf.nn.tanh)
-            with tf.variable_scope('cw_conv_112'):
-                gen_112 = conv2d(dconv6, 3, 'pw_conv', kernel_size=4, strides = 1,
-                                 activation = tf.nn.tanh)
-            with tf.variable_scope('cw_conv_224'):
-                gen_224 = conv2d(dconv7, 3, 'pw_conv', kernel_size=4, strides = 1,
-                                 activation = tf.nn.tanh)
-        
-            return (gen_56+1)*127.5, (gen_112+1)*127.5, (gen_224+1)*127.5
-        
-    def discriminator_bn(self, images, y=None, reuse=False):
-        with tf.variable_scope("discriminator", reuse=reuse) as scope:
-            # 70 x 70 patchGAN: 
-            # shape of input images 224 x 224 x 6, concat profile and front face
-            # shape of input images 7 x 7 x 1024,
-            d_bn1 = batch_norm(name='d_bn1')
-            d_bn2 = batch_norm(name='d_bn2')
-            d_bn3 = batch_norm(name='d_bn3')
-            d_bn4 = batch_norm(name='d_bn4')
-            
-            images = images / 127.5 - 1
-            with tf.variable_scope('d_conv0'):
-                h0 = lrelu(conv2d(images, 32, 'd_conv0', kernel_size=4, strides=2))
-            # h0 is (112 x 112 x 32)
-            
-            with tf.variable_scope('d_conv1'):
-                h1 = lrelu(d_bn1(conv2d(h0, 64, 'd_conv1', kernel_size=4, strides=2), self.is_train))
-            # h1 is (56 x 56 x 64)
-            with tf.variable_scope('d_conv2'):
-                h2 = lrelu(d_bn2(conv2d(h1, 128, 'd_conv2', kernel_size=4, strides=2), self.is_train))
-            # h2 is (28 x 28 x 128)
-            with tf.variable_scope('d_conv3'):
-                h3 = lrelu(d_bn3(conv2d(h2, 256, 'd_conv3', kernel_size=4, strides=2), self.is_train))
-            # h3 is (14 x 14 x 256)
-            with tf.variable_scope('d_conv4'):
-                h4 = lrelu(d_bn4(conv2d(h3, 256, 'd_conv4', kernel_size=4, strides=2), self.is_train))
-            # h4 is (7 x 7 x 256)
-            #dim_wh, dim_c = h2.get_shape().as_list()[1], h2.get_shape().as_list()[3]
-            #h5 = fullyConnect(tf.reshape(h4, [cfg.batch_size, -1]), 1, 'd_fc1')
-            with tf.variable_scope('d_conv5'):
-                h5 = conv2d(h4, 1, 'd_conv5', kernel_size=4, strides=1)
-            # h5 is (7 x 7 x 1)
-            
-            return tf.nn.sigmoid(h5), h5
-    
 if '__name__' == '__main__':
     net = WGAN()
     net.build()

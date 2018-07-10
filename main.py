@@ -2,35 +2,38 @@
 import os
 import tensorflow as tf
 from config import cfg
-from WGAN_GP2 import WGAN_GP
+from WGAN_GP import WGAN_GP
 
 # Training Setting
-test_num = 1600 / cfg.batch_size
+test_num = 800 / cfg.batch_size
     
 def main(_):
-    # Choose GPU 
+    # Environment Setting
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-    
-    net = WGAN_GP() #
+    os.environ["CUDA_VISIBLE_DEVICES"] = "3"
     if not os.path.exists(cfg.results):
         os.mkdir(cfg.results)
-        
+    
+    # Construct Networks
+    # Change this line if 'LSGAN' or 'WGAN'
+    net = WGAN_GP()
+    
+    # Train and Test
     config = tf.ConfigProto()
-    #config.gpu_options.allow_growth = True
-    config.gpu_options.per_process_gpu_memory_fraction = 0.7
+    config.gpu_options.allow_growth = True
     with tf.Session(config=config, graph=net.graph) as sess:
         sess.run(tf.global_variables_initializer())
         threads = tf.train.start_queue_runners(sess=sess)
-        saver = tf.train.Saver() #max_to_keep=0
+        saver = tf.train.Saver(max_to_keep=0) #
+        
         if cfg.is_finetune:
             saver.restore(sess, cfg.model_path)
-            print('Load Model Successfully!')
-        
+            print('Load Finetuned Model Successfully!')
+            
         num_batch = int(cfg.dataset_size / cfg.batch_size)
         writer = tf.summary.FileWriter(cfg.summary_dir, sess.graph)
                     
-        # 2. Train by minibatch and critic
+        # Train by minibatch and critic
         for epoch in range(cfg.epoch):
             for step in range(num_batch):                
                 # Discriminator Part
@@ -39,16 +42,18 @@ def main(_):
                 else:
                     critic = cfg.critic
                 for i in range(critic):
-                    _ = sess.run(net.train_dis, {net.is_train:True}) # net.clip_D,
+                    # add 'net.clip_D' into ops if 'LSGAN' or 'WGAN'
+                    _ = sess.run(net.train_dis, {net.is_train:True}) # net.clip_D
                 
                 # Generative Part
-                _,fl,gl,dl,gen,g1,g2,g4,summary = sess.run([net.train_gen,net.feature_loss,net.g_loss,
-                                                       net.d_loss,net.gen_p,net.grad1,net.grad2,net.grad4,net.train_summary],
-                                                       {net.is_train:True})
+                _,fl,gl,dl,gen,summary = sess.run([net.train_gen,net.feature_loss,net.g_loss,
+                                                  net.d_loss,net.gen_p,net.train_summary],
+                                                 {net.is_train:True})
                 writer.add_summary(summary, epoch*num_batch + step)
-                print('%d-%d, Fea Loss:%.2f, D Loss:%4.1f, G Loss:%4.1f, g1/2/4:%.3f/%.3f/%.3f' % 
-                    (epoch, step, fl, dl, gl, g1*500,g2,g4))
+                print('%d-%d, Fea Loss:%.2f, D Loss:%4.1f, G Loss:%4.1f' %  #g1/2/3:%.5f/%.5f/%.5f 
+                     (epoch, step, fl, dl, gl)) #g1*cfg.lambda_fea,g2,g4
                 
+                # Test Part
                 if step % cfg.test_sum_freq == 0:
                     net.data_feed.save_train(gen)
                     fl, dl, gl = 0., 0., 0.
@@ -59,13 +64,10 @@ def main(_):
                                                           {net.profile:te_profile, net.front:te_front, net.is_train:False}) #
                         net.data_feed.save_images(images, epoch)
                         dl += dl_; gl += gl_; fl += fl_
-                    print('Testing: Fea Loss:%.1f, D Loss:%.1f, G Loss:%.1f' % 
-                         (fl/test_num, dl/test_num, gl/test_num))
+                    print('Testing: Fea Loss:%.1f, D Loss:%.1f, G Loss:%.1f' % (fl/test_num, dl/test_num, gl/test_num))
                 if(step != 0 and step % cfg.save_freq == 0):
                     print("Saving Model....")
-                    saver.save(sess, cfg.logdir + '-%1d' % (epoch)) #
-            
-        #fd_results.close()
+                    saver.save(sess, cfg.logdir + '-%02d' % (epoch)) #
         
 if __name__ == "__main__":
     tf.app.run()

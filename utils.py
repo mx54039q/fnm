@@ -171,6 +171,8 @@ class loadData(object):
         """
         imgs = imgs.astype('uint8')  # inverse_transform
         img_num = imgs.shape[0]
+        if(cfg.channel == 1):
+            imgs = imgs[:,:,:,0]
         save_path = 'train_imgs'
         if not os.path.exists(save_path):
             os.mkdir(save_path)

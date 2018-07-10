@@ -84,6 +84,14 @@ class WGAN_GP(object):
         tf.logging.info('Seting up the main structure')
 
     def build_arch(self):
+        """Build up architecture
+        
+        1. Pretrained face recognition model forward
+        2. Decoder from feature to image
+        3. Refeed generated image to face recognition model
+        4. Feed generated image to Discriminator
+        5. Construct 'Grade Penalty' for discriminator
+        """
         # Use pretrained model(vgg-face) as encoder of Generator
         self.feature_p = self.face_model.forward(self.profile,'profile_enc')
         self.feature_f = self.face_model.forward(self.front, 'front_enc')
@@ -116,23 +124,30 @@ class WGAN_GP(object):
             self.grad4 = tf.reduce_mean(slopes)
                 
     def decoder(self, feature, reuse=False):
-        """
-        decoder of generator, decoder feature from vgg
+        """Decoder part of generator
+        
+        Embed pretrained face recognition model in Generator.
+        This part transforms feature to image. 
+        
         args: 
-            feature: face identity feature from VGG-16 / VGG-res50.
+            feature: face identity feature from pretrained face model.
             reuse: Whether to reuse the model(Default False).
         return: 
             generated front face, which value is in range [0, 255].
         """
         # The feature vector extracted from profile by VGG-16 is 4096-D
         # The feature vector extracted from profile by Resnet-50 is 2048-D
-        with tf.variable_scope('decoder', reuse=reuse) as scope:        
-            # Stacked Transpose Convolutions:(2048)
-            #bn1 = batch_norm(name='bn1')
+        with tf.variable_scope('decoder', reuse=reuse) as scope:
+            # Choose Normalization Method
             norm = bn if(cfg.norm=='bn') else pixel_norm
             
+            # Split feature tuple
             feat28,feat14,feat7,pool5 = feature[0],feature[1],feature[2],feature[3]
             
+            # We use the last second feature layer of face model, whose shape is
+            # 7 x 7 x 2048. If you use 'flatten feature', you should connect 
+            # 'Fully Connect Layer' first to expand dimension of feature. You can
+            # use code below and modify the whole network.
             if 0:   
                 g_input = tf.reshape(fullyConnect(pool5, 4*4*512, 'fc0'), [-1, 4, 4, 512])
                 #ouput shape: [4, 4, 512]
@@ -141,12 +156,10 @@ class WGAN_GP(object):
                                             kernel_size=4, strides = 1, padding='valid'),self.is_train,'norm1'))
                 res1 = res_block(dconv1, 'res1', self.is_train, cfg.norm)
             
+            # input shape: [7, 7, 2048]
             with tf.variable_scope('conv0'):
                 feat7 = tf.nn.relu(conv2d(feat7, 512, 'conv1', kernel_size=1, strides = 1))
-                #feat7_1 = tf.nn.relu(conv2d(feat7, 256, 'conv2', kernel_size=1, strides = 1))
-                #feat7_1_mirror = tf.reverse(feat7_1, axis=[2])
-                #conv0 = tf.concat((feat7_0, feat7_1_mirror), axis=3)
-            #ouput shape: [7, 7, 512]
+            # ouput shape: [7, 7, 512]
             res1_0 = res_block(feat7, 'res1_0',self.is_train, cfg.norm)
             res1_1 = res_block(res1_0, 'res1_1',self.is_train, cfg.norm)
             res1_2 = res_block(res1_1, 'res1_2',self.is_train, cfg.norm)
@@ -184,23 +197,35 @@ class WGAN_GP(object):
             return (gen + 1) * 127.5
         
     def discriminator(self, images, reuse=False):
-        """
-        Waasertein Distance, logits shape [bs, 1]
+        """Attention Discriminator Network
+        
+        As normalized face is strictly aligned, we construct 
+        Attention Discriminators on fixed area of face image 
+        (i.e. whole image, eyes, nose, mouth, face). This 
+        contribution make Discriminator focus on local area, 
+        and make Generator produce more elaborate detail.       
+        
+        1. Waasertein Distance
+        2. Layer Normalization, LReLU, Stride Convolution
+        
         args: 
-            image: front face in [0,255]. [224,224,3]
+            image: front face in range [0,255].
             reuse: Whether to reuse the model(Default False).
         return: 
             a set of and logits.
         """
+        
         with tf.variable_scope("discriminator", reuse=reuse) as scope:
             norm = slim.layer_norm
             
             images = images / 127.5 - 1
             bs = images.get_shape().as_list()[0]
-            eyes = tf.slice(images, [0,64,50,0], [bs,36,124,3]) #[64:100,50:174,:]
-            nose = tf.slice(images, [0,75,90,0], [bs,65,44,3]) #[75:140,90:134,:]
-            mouth = tf.slice(images, [0,140,75,0], [bs,30,74,3]) #[140:170,75:149,:]
-            face = tf.slice(images, [0,64,50,0], [bs,116,124,3]) #[64:180,50:174,:]
+            
+            # Four Fixed Area. Modify them to fit your dataset
+            eyes = tf.slice(images, [0,64,50,0], [bs,36,124,cfg.channel]) #[64:100,50:174,:]
+            nose = tf.slice(images, [0,75,90,0], [bs,65,44,cfg.channel]) #[75:140,90:134,:]
+            mouth = tf.slice(images, [0,140,75,0], [bs,30,74,cfg.channel]) #[140:170,75:149,:]
+            face = tf.slice(images, [0,64,50,0], [bs,116,124,cfg.channel]) #[64:180,50:174,:]
             with tf.variable_scope("images"):
                 with tf.variable_scope('d_conv0'):
                     h0_0 = lrelu(conv2d(images, 32, 'd_conv0', kernel_size=4, strides=2))
@@ -293,36 +318,31 @@ class WGAN_GP(object):
             return h0_5, h1_4, h2_4, h3_4, h4_4
 
     def loss(self):
-        """
-        Loss Functions
+        """Loss Functions
+        
+        1. Pixel-Wise Loss: front-to-front reconstruct
+        2. Perceptual Loss: Feature distance on space of pretrined face model
+        3. Regulation Loss: L2 weight regulation
+        4. Adversarial Loss: Wasserstein Distance
+        5. Symmetric Loss: NOT APPLY
+        6. Drift Loss: NOT APPLY
+        7. Grade Penalty Loss: Grade penalty for Discriminator
         """
         with tf.name_scope('loss') as scope:
             with tf.name_scope('FeatureNorm'):
-                pool5_p_norm = self.feature_p[3] / (tf.norm(self.feature_p[3], axis=1,keep_dims=True) + epsilon)
-                pool5_f_norm = self.feature_f[3] / (tf.norm(self.feature_f[3], axis=1,keep_dims=True) + epsilon)
-                pool5_gen_p_norm = self.pool5_gen_p / (tf.norm(self.pool5_gen_p, axis=1,keep_dims=True) + epsilon)
-                pool5_gen_f_norm = self.pool5_gen_f / (tf.norm(self.pool5_gen_f, axis=1,keep_dims=True) + epsilon)
+                pool5_p_norm = self.feature_p[-1] / (tf.norm(self.feature_p[-1], axis=1,keep_dims=True) + epsilon)
+                pool5_f_norm = self.feature_f[-1] / (tf.norm(self.feature_f[-1], axis=1,keep_dims=True) + epsilon)
+                pool5_gen_p_norm = self.feature_gen_p[-1] / (tf.norm(self.feature_gen_p[-1], axis=1,keep_dims=True) + epsilon)
+                pool5_gen_f_norm = self.feature_gen_f[-1] / (tf.norm(self.feature_gen_f[-1], axis=1,keep_dims=True) + epsilon)
                         
             # 1. Frontalization Loss: L1-Norm
             self.front_loss = tf.reduce_mean(tf.reduce_sum(tf.abs(self.front/255. - self.gen_f/255.), [1,2,3]))
-            if 0:
-              with tf.name_scope('Pixel_Loss'):
-                  #face_mask = Image.open('tt.bmp').crop([13,13,237,237])
-                  #face_mask = np.array(face_mask, dtype=np.float32).reshape(224,224,1) / 255.0
-                  #face_mask = np.tile(face_mask, [cfg.batch_size, 1, 1, 3])
-                  #self.front_loss = tf.losses.absolute_difference(labels=self.front, 
-                  #                                                predictions=self.texture)
-                  #self.front_loss = tf.reduce_sum(tf.abs(self.gt/255. - self.texture/255.))
-                  self.weights = tf.reduce_sum(tf.multiply(enc_fea_norm, enc_fea_gt_norm), [1])
-                  abs_sum = tf.reduce_sum(tf.abs(self.gt/255. - self.gen_p/255.), [1,2,3])
-                  self.front_loss = tf.reduce_mean(tf.multiply(self.weights, abs_sum))
-                  tf.add_to_collection('losses', self.front_loss)
           
             # 2. Feature Loss: Cosine-Norm / L2-Norm
             with tf.name_scope('Perceptual_Loss'):
-                feature_loss = (1-cfg.w_f)*(1 - tf.reduce_sum(tf.multiply(pool5_p_norm, pool5_gen_p_norm), [1])) + \
+                self.feature_distance = (1-cfg.w_f)*(1 - tf.reduce_sum(tf.multiply(pool5_p_norm, pool5_gen_p_norm), [1])) + \
                                cfg.w_f*(1 - tf.reduce_sum(tf.multiply(pool5_f_norm, pool5_gen_f_norm), [1]))
-                self.feature_loss = tf.reduce_mean(feature_loss) #/ 2 
+                self.feature_loss = tf.reduce_mean(self.feature_distance) #/ 2 
                 tf.add_to_collection('losses', self.feature_loss)
             
             # 3. L2 Regulation Loss
@@ -340,9 +360,6 @@ class WGAN_GP(object):
             
             # 4. Adversarial Loss
             with tf.name_scope('Adversarial_Loss'):
-                if 0: #MODE == 'lsgan':
-                    self.g_loss = tf.reduce_mean((self.df1 - 1)**2)
-                    self.d_loss = (tf.reduce_mean((self.dr - 1)**2) + tf.reduce_mean((self.df1 - 0)**2))/2.
                 self.d_loss = tf.reduce_mean(tf.add_n(self.df1)*(1-cfg.w_f) + tf.add_n(self.df2)*cfg.w_f - tf.add_n(self.dr)) / 5
                 self.g_loss = - tf.reduce_mean(tf.add_n(self.df1)*(1-cfg.w_f) + tf.add_n(self.df2)*cfg.w_f) / 5
                 tf.add_to_collection('losses', self.d_loss)
@@ -366,8 +383,9 @@ class WGAN_GP(object):
                                 self.reg_dis
                 
     def _summary(self):
-        """
-        Tensorflow Summary
+        """Tensorflow Summary
+        
+        Add Summary as you like
         """
         train_summary = []
         train_summary.append(tf.summary.scalar('train/d_loss', self.d_loss))
