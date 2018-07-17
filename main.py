@@ -23,9 +23,12 @@ def main(_):
     config.gpu_options.allow_growth = True
     with tf.Session(config=config, graph=net.graph) as sess:
         sess.run(tf.global_variables_initializer())
-        threads = tf.train.start_queue_runners(sess=sess)
-        saver = tf.train.Saver(max_to_keep=0) #
         
+        # Start Thread
+        coord = tf.train.Coordinator()
+        threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+        
+        saver = tf.train.Saver(max_to_keep=0) #
         if cfg.is_finetune:
             saver.restore(sess, cfg.model_path)
             print('Load Finetuned Model Successfully!')
@@ -65,9 +68,15 @@ def main(_):
                         net.data_feed.save_images(images, epoch)
                         dl += dl_; gl += gl_; fl += fl_
                     print('Testing: Fea Loss:%.1f, D Loss:%.1f, G Loss:%.1f' % (fl/test_num, dl/test_num, gl/test_num))
+                    
+                # Save Model
                 if(step != 0 and step % cfg.save_freq == 0):
                     print("Saving Model....")
                     saver.save(sess, cfg.logdir + '-%02d' % (epoch)) #
+        
+        # Close Threads
+        coord.request_stop()
+        coord.join(threads)
         
 if __name__ == "__main__":
     tf.app.run()
