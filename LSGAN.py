@@ -340,7 +340,7 @@ class LSGAN(object):
                                             tf.square(self.df1)*(1-cfg.w_f) + 
                                             tf.square(self.df2)*cfg.w_f)
                 self.g_loss /= 5
-                self.g_loss = tf.reduce_mean(tf.square(self.df1 - 1)*(1-cfg.w_f) + 
+                self.d_loss = tf.reduce_mean(tf.square(self.df1 - 1)*(1-cfg.w_f) + 
                                             tf.square(self.df2 - 1)*cfg.w_f)
                 self.d_loss /= 5
                 tf.add_to_collection('losses', self.d_loss)

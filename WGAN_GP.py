@@ -41,47 +41,38 @@ class WGAN_GP(object):
                 self.face_model.build()
                 print('VGG model built successfully.')
             
-            # Construct G_dec and D
-            if cfg.is_train:                
-                self.is_train = tf.placeholder(tf.bool, name='is_train')
-                self.profile, self.front = self.data_feed.get_train()
-                
-                # Construct Model
-                self.build_arch()
-                print('Model built successfully.')
-                
-                all_vars = tf.trainable_variables()
-                self.vars_gen = [var for var in all_vars if var.name.startswith('decoder')]
-                self.vars_dis = [var for var in all_vars if var.name.startswith('discriminator')]
-                self.loss()
-                               
-                #################DEBUG#######################
-                with tf.name_scope('Debug'):
-                    grad1 = tf.gradients([self.feature_loss], [self.gen_p])[0]
-                    self.grad1 = tf.reduce_mean(tf.sqrt(tf.reduce_sum(tf.square(grad1), [1,2,3])))
-                    grad2 = tf.gradients([self.g_loss], [self.gen_p])[0]
-                    self.grad2 = tf.reduce_mean(tf.sqrt(tf.reduce_sum(tf.square(grad2), [1,2,3])))
-                    grad3 = tf.gradients([self.front_loss], [self.gen_f])[0]
-                    self.grad3 = tf.reduce_mean(tf.sqrt(tf.reduce_sum(tf.square(grad3), [1,2,3])))
-                # Summary
-                self._summary()    
-                
-                # Trainer
-                self.global_step = tf.Variable(0, name='global_step', trainable=False)
-                self.train_gen = tf.train.AdamOptimizer(cfg.lr, beta1=cfg.beta1, beta2=cfg.beta2).minimize(
-                                 self.gen_loss,
-                                 global_step=self.global_step, var_list=self.vars_gen)
-                self.train_dis = tf.train.AdamOptimizer(cfg.lr, beta1=cfg.beta1, beta2=cfg.beta2).minimize(
-                                 self.dis_loss,
-                                 global_step=self.global_step, var_list=self.vars_dis)
-            else:
-                self.profile = tf.placeholder("float", [None, cfg.height, cfg.width, cfg.channel], 'profile')
-                self.is_train = tf.placeholder(tf.bool, name='is_train')
-                self.front = tf.placeholder("float", [None, cfg.height, cfg.width, cfg.channel], 'front')
-                
-                self.build_arch()
-                
-        tf.logging.info('Seting up the main structure')
+            # Construct G_dec and D               
+            self.is_train = tf.placeholder(tf.bool, name='is_train')
+            self.profile, self.front = self.data_feed.get_train()
+            
+            # Construct Model
+            self.build_arch()
+            print('Model built successfully.')
+            
+            all_vars = tf.trainable_variables()
+            self.vars_gen = [var for var in all_vars if var.name.startswith('decoder')]
+            self.vars_dis = [var for var in all_vars if var.name.startswith('discriminator')]
+            self.loss()
+                           
+            #################DEBUG#######################
+            with tf.name_scope('Debug'):
+                grad1 = tf.gradients([self.feature_loss], [self.gen_p])[0]
+                self.grad1 = tf.reduce_mean(tf.sqrt(tf.reduce_sum(tf.square(grad1), [1,2,3])))
+                grad2 = tf.gradients([self.g_loss], [self.gen_p])[0]
+                self.grad2 = tf.reduce_mean(tf.sqrt(tf.reduce_sum(tf.square(grad2), [1,2,3])))
+                grad3 = tf.gradients([self.front_loss], [self.gen_f])[0]
+                self.grad3 = tf.reduce_mean(tf.sqrt(tf.reduce_sum(tf.square(grad3), [1,2,3])))
+            # Summary
+            self._summary()    
+            
+            # Trainer
+            self.global_step = tf.Variable(0, name='global_step', trainable=False)
+            self.train_gen = tf.train.AdamOptimizer(cfg.lr, beta1=cfg.beta1, beta2=cfg.beta2).minimize(
+                             self.gen_loss,
+                             global_step=self.global_step, var_list=self.vars_gen)
+            self.train_dis = tf.train.AdamOptimizer(cfg.lr, beta1=cfg.beta1, beta2=cfg.beta2).minimize(
+                             self.dis_loss,
+                             global_step=self.global_step, var_list=self.vars_dis)
 
     def build_arch(self):
         """Build up architecture
@@ -166,19 +157,16 @@ class WGAN_GP(object):
             res1_3 = res_block(res1_2, 'res1_3',self.is_train, cfg.norm)
             #ouput shape: [7, 7, 512]
             with tf.variable_scope('dconv2'):
-                #feat7 = tf.nn.relu(norm(conv2d(feat7, 256, 'feat7', kernel_size=1),self.is_train,'norm2_1'))
                 dconv2 = tf.nn.relu(norm(deconv2d(res1_3, 256, 'dconv2', 
                                         kernel_size=4, strides = 2),self.is_train,'norm2_2'))
             res2 = res_block(dconv2, 'res2',self.is_train, cfg.norm)
             #ouput shape: [14, 14, 256]
             with tf.variable_scope('dconv3'):
-                #feat14 = tf.nn.relu(norm(conv2d(feat14, 128, 'feat14', kernel_size=1),self.is_train,'norm3_1'))
                 dconv3 = tf.nn.relu(norm(deconv2d(res2, 128, 'dconv2', 
                                         kernel_size=4, strides = 2),self.is_train,'norm3_2'))
             res3 = res_block(dconv3, 'res3',self.is_train, cfg.norm)
             #output shape: [28, 28, 128]
             with tf.variable_scope('dconv4'):
-                #feat28 = tf.nn.relu(norm(conv2d(feat28, 64, 'feat28', kernel_size=1),self.is_train,'norm4_1'))
                 dconv4 = tf.nn.relu(norm(deconv2d(res3, 64, 'dconv4', 
                                         kernel_size=4, strides = 2),self.is_train,'norm4_2'))
             res4 = res_block(dconv4, 'res4',self.is_train, cfg.norm)
@@ -383,10 +371,7 @@ class WGAN_GP(object):
                                 self.reg_dis
                 
     def _summary(self):
-        """Tensorflow Summary
-        
-        Add Summary as you like
-        """
+        """Tensorflow Summary"""
         train_summary = []
         train_summary.append(tf.summary.scalar('train/d_loss', self.d_loss))
         train_summary.append(tf.summary.scalar('train/g_loss', self.g_loss))
