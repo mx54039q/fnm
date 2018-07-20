@@ -39,41 +39,32 @@ class WGAN(object):
                 print('VGG model built successfully.')
             
             # Construct G_dec and D in 3 scale
-            if cfg.is_train:                
-                self.is_train = tf.placeholder(tf.bool, name='is_train')
-                self.profile, self.front = self.data_feed.get_train()
+            self.is_train = tf.placeholder(tf.bool, name='is_train')
+            self.profile, self.front = self.data_feed.get_train()
+            
+            # Construct Model
+            self.build_arch()
+            print('Model built successfully.')
+            
+            all_vars = tf.trainable_variables()
+            self.vars_gen = [var for var in all_vars if var.name.startswith('decoder')]
+            self.vars_dis = [var for var in all_vars if var.name.startswith('discriminator')]
+            self.loss()
+            self._summary()
+            
+            # Trainer
+            self.global_step = tf.Variable(0, name='global_step', trainable=False)
+            self.train_gen = tf.train.AdamOptimizer(cfg.lr, beta1=cfg.beta1, beta2=cfg.beta2).minimize(
+                             self.gen_loss,
+                             global_step=self.global_step, var_list=self.vars_gen)
+            self.train_dis = tf.train.AdamOptimizer(cfg.lr, beta1=cfg.beta1, beta2=cfg.beta2).minimize(
+                             self.dis_loss,
+                             global_step=self.global_step, var_list=self.vars_dis)
+            
+            # Weight Clip on D
+            with tf.name_scope('clip_weightOf_D'):
+                self.clip_D = [p.assign(tf.clip_by_value(p, -0.01, 0.01)) for p in self.vars_dis]
                 
-                # Construct Model
-                self.build_arch()
-                print('Model built successfully.')
-                
-                all_vars = tf.trainable_variables()
-                self.vars_gen = [var for var in all_vars if var.name.startswith('decoder')]
-                self.vars_dis = [var for var in all_vars if var.name.startswith('discriminator')]
-                self.loss()
-                self._summary()
-                
-                # Trainer
-                self.global_step = tf.Variable(0, name='global_step', trainable=False)
-                self.train_gen = tf.train.AdamOptimizer(cfg.lr, beta1=cfg.beta1, beta2=cfg.beta2).minimize(
-                                 self.gen_loss,
-                                 global_step=self.global_step, var_list=self.vars_gen)
-                self.train_dis = tf.train.AdamOptimizer(cfg.lr, beta1=cfg.beta1, beta2=cfg.beta2).minimize(
-                                 self.dis_loss,
-                                 global_step=self.global_step, var_list=self.vars_dis)
-                
-                # Weight Clip on D
-                with tf.name_scope('clip_weightOf_D'):
-                    self.clip_D = [p.assign(tf.clip_by_value(p, -0.01, 0.01)) for p in self.vars_dis]
-            else:
-                self.profile = tf.placeholder("float", [None, cfg.height, cfg.width, cfg.channel], 'profile')
-                self.is_train = tf.placeholder(tf.bool, name='is_train')
-                self.front = tf.placeholder("float", [None, cfg.height, cfg.width, cfg.channel], 'front')
-                
-                self.build_arch()
-                
-        tf.logging.info('Seting up the main structure')
-
     def build_arch(self):
         """Build up architecture
         
