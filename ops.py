@@ -5,7 +5,7 @@ import tensorflow as tf
 from config import cfg
 import tensorflow.contrib.slim as slim
 
-def instance_norm(input, name="instance_norm"):
+def instance_norm(input, train=True, name="instance_norm"):
     with tf.variable_scope(name):
         depth = input.get_shape()[3]
         scale = tf.get_variable("scale", [depth], initializer=tf.random_normal_initializer(1.0, 0.02, dtype=tf.float32))
