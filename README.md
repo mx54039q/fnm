@@ -1,12 +1,12 @@
-<img src='images/fig1.jpg' width="600px">
-<img src='images/fig2.jpg' width="600px">
+<img src='images/fig1.jpg' width="600px" align=center>
+<img src='images/fig2.jpg' width="600px" align=center>
 
 # Unsupervised Face Normalization with Extreme Pose and Expression in the Wild
 
 This repository contains training code for the paper
 
 Unsupervised Face Normalization with Extreme Pose and Expression in the Wild
-(The paper will be released soon.)
+(The paper will be released soon.)  
 IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2019
 
 The model learns to generate a frontal, neutral expression, photorealistic face image from one face image in the wild.
