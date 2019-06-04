@@ -1,5 +1,5 @@
-<div align="center"> <img src='images/fig1.jpg' width="600px"> </div>
-<div align="center"> <img src='images/fig2.jpg' width="600px"> </div>
+<img src='images/fig1.jpg' width="600px" align=center>
+<img src='images/fig2.jpg' width="600px" align=center>
 
 # Unsupervised Face Normalization with Extreme Pose and Expression in the Wild
 
