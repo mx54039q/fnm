@@ -1,14 +1,17 @@
-<img src='images/fig1.jpg' width="900px">
-<img src='images/fig2.jpg' width="900px">
+<img src='images/fig1.jpg' width="600px">
+<img src='images/fig2.jpg' width="600px">
 
-# Unsupervised Face Normalization with Extreme Pose and Expression in the Wild--
+# Unsupervised Face Normalization with Extreme Pose and Expression in the Wild
 
 This repository contains training code for the paper
 
 Unsupervised Face Normalization with Extreme Pose and Expression in the Wild
 (The paper will be released soon.)
+IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2019
 
 The model learns to generate a frontal, neutral expression, photorealistic face image from one face image in the wild.
+
+Contact: Yichen Qian (mx54039q@bupt.edu.cn), Weihong Deng (whdeng@bupt.edu.cn), Jiani Hu (jnhu@bupt.edu.cn)
 
 ## Usage
 
@@ -24,14 +27,15 @@ All face images are detected by [MTCNN](https://github.com/kpzhang93/MTCNN_face_
 
 ## Pretrained models(release soon)
 
-* [Face expert network, VGG-Face2]()
-* [FNM]()
+* Face expert network (VGG-Face2)
+* FNM
 
 ### Train and test
 
 - Train
-After unnormal face images and normal face images are ready, make image list respectively.
-Modify image path and list path, etc, in **config.py**.
+
+After unnormal face images and normal face images are ready, prepare image list respectively.
+Modify image path and list path and other settings in **config.py**.
 ```
 python main.py
 ```
@@ -47,9 +51,8 @@ If you use other dataset for normal face set, please modify the attention discri
 ### Notes
 
 - The identity perception loss (L_ip) is slightly modified. Cosine distance is used other than mean square error.
-- 
 
-## Citation and Contact
+## Citation
 If you find FNM useful in your research, please consider citing:
 ```
 @inproceedings{FNM,
