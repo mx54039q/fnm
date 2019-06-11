@@ -25,9 +25,9 @@ We used [CASIA-Webface](http://www.cbsr.ia.ac.cn/english/CASIA-WebFace-Database.
 
 All face images are detected by [MTCNN](https://github.com/kpzhang93/MTCNN_face_detection_alignment), and then cropped.
 
-## Pretrained models(release soon)
+## Pretrained models
 
-* Face expert network (VGG-Face2)
+* Face expert network ([VGG-Face2](https://drive.google.com/open?id=1umCOnx42R6ivmvKBn-EExwyisBHGbvOl))
 * FNM
 
 ### Train and test

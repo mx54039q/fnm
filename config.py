@@ -20,7 +20,7 @@ flags.DEFINE_float('lambda_gan', 1, 'weight of the loss for gan loss')
 flags.DEFINE_float('lambda_gp', 10, 'weight of the loss for gradient penalty on parameter of D')
 
 # For training
-flags.DEFINE_integer('dataset_size', 50000, 'number of non-normal face set')
+flags.DEFINE_integer('dataset_size', 297369, 'number of non-normal face set')
 flags.DEFINE_string('profile_path', '', 'dataset path')  # casia_aligned_250_250_jpg
 flags.DEFINE_string('profile_list', '', 'train profile list')
 flags.DEFINE_string('front_path', '', 'front data path')
@@ -30,9 +30,9 @@ flags.DEFINE_string('test_list', '', 'train front list')
 flags.DEFINE_boolean('is_train', True, 'train or test')
 flags.DEFINE_boolean('is_finetune', False, 'finetune') # False, True
 flags.DEFINE_string('face_model', 'resnet50.npy', 'face model path')
-flags.DEFINE_string('checkpoint', 'checkpoint/v1', 'checkpoint directory')
-flags.DEFINE_string('summary_dir', 'log/v1', 'logs directory')
-flags.DEFINE_string('checkpoint_ft', 'checkpoint/v1/ck-09', 'finetune or test checkpoint path')
+flags.DEFINE_string('checkpoint', 'checkpoint/fnm', 'checkpoint directory')
+flags.DEFINE_string('summary_dir', 'log/fnm', 'logs directory')
+flags.DEFINE_string('checkpoint_ft', 'checkpoint/fnm/ck-09', 'finetune or test checkpoint path')
 flags.DEFINE_integer('batch_size', 16, 'batch size')
 flags.DEFINE_integer('epoch', 10, 'epoch')
 flags.DEFINE_integer('critic', 1, 'number of D training times')
@@ -43,7 +43,7 @@ flags.DEFINE_float('beta2', 0.9, 'beta2 momentum term of adam')
 flags.DEFINE_float('stddev', 0.02, 'stddev for W initializer')
 flags.DEFINE_boolean('use_bias', False, 'whether to use bias')
 flags.DEFINE_string('norm', 'bn', 'normalize function for G')
-flags.DEFINE_string('results', 'results/v1', 'path for saving results') #
+flags.DEFINE_string('results', 'results/fnm', 'path for saving results') #
 
 ############################
 #   environment setting    #
