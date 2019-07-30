@@ -28,7 +28,7 @@ All face images are detected by [MTCNN](https://github.com/kpzhang93/MTCNN_face_
 ## Pretrained models
 
 * Face expert network ([VGG-Face2](https://drive.google.com/open?id=1umCOnx42R6ivmvKBn-EExwyisBHGbvOl))
-* FNM
+* [FNM](https://drive.google.com/open?id=1k7_885r1A8j3nxp-ft5X5zxZ7Ow8-Cua)
 
 ### Train and test
 
